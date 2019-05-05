@@ -20,7 +20,10 @@ class ResidualBlock(nn.Module):
         self.relu = nn.ReLU(inplace=True)
 
     def forward(self, x):
-        return self.relu(x + self.main(x))
+        out = self.main(x)
+        out += x
+        out = self.relu(out)
+        return out
 
 
 class Encoder(nn.Module):
@@ -82,7 +85,7 @@ class Transformer(nn.Module):
         c = c.view(c.size(0), c.size(1), 1, 1)
         c = c.repeat(1, 1, x.size(2), x.size(3))
         # transformed feature map
-        f = self.main(torch.cat((x, c), 1))
+        f = self.main(torch.cat((x, c), dim=1))
         # alpha mask
         g = (1 + self.mask(f)) / 2
         return  g * f + (1 - g) * x
@@ -98,7 +101,7 @@ class Reconstructor(nn.Module):
         layers = []
 
         # up-sampling layers
-        layers.append(nn.ConvTranspose2d(conv_dim, conv_dim//2, kernel_size=7, stride=1, padding=3, bias=False))
+        layers.append(nn.ConvTranspose2d(conv_dim, conv_dim//2, kernel_size=4, stride=2, padding=1, bias=False))
         layers.append(nn.InstanceNorm2d(conv_dim//2, affine=True, track_running_stats=True))
         layers.append(nn.ReLU(inplace=True))
         conv_dim = conv_dim // 2
@@ -109,7 +112,7 @@ class Reconstructor(nn.Module):
         conv_dim = conv_dim // 2
 
         # convlutional layer
-        layers.append(nn.Conv2d(conv_dim, 3, kernel_size=4, stride=2, padding=1, bias=False))
+        layers.append(nn.Conv2d(conv_dim, 3, kernel_size=3, stride=1, padding=1, bias=False))
         layers.append(nn.InstanceNorm2d(3, affine=True, track_running_stats=True))
         layers.append(nn.ReLU(inplace=True))
 
@@ -129,21 +132,74 @@ class Discriminator(nn.Module):
         layers = []
 
         layers.append(nn.Conv2d(3, conv_dim, kernel_size=4, stride=2, padding=1))
+        layers.append(nn.InstanceNorm2d(conv_dim, affine=True, track_running_stats=True))
         layers.append(nn.LeakyReLU(0.01))
 
         for i in range(1, repeat_num):
             layers.append(nn.Conv2d(conv_dim, conv_dim*2, kernel_size=4, stride=2, padding=1))
+            layers.append(nn.InstanceNorm2d(conv_dim*2, affine=True, track_running_stats=True))
             layers.append(nn.LeakyReLU(0.01))
             conv_dim = conv_dim * 2
 
         self.main = nn.Sequential(*layers)
-        self.conv1 = nn.Conv2d(conv_dim, 1, kernel_size=3, stride=1, padding=1, bias=False)
-        self.conv2 = nn.Conv2d(conv_dim, c_dim, kernel_size=image_size//2**repeat_num, bias=False)
+        self.out_src = nn.Sequential(
+            nn.Conv2d(conv_dim, 1, kernel_size=3, stride=1, padding=1, bias=False),
+            nn.InstanceNorm2d(1, affine=True, track_running_stats=True),
+            nn.LeakyReLU(0.01))
+        self.out_cls = nn.Sequential(
+            nn.Conv2d(conv_dim, c_dim, kernel_size=image_size//2**repeat_num, bias=False),
+            nn.InstanceNorm2d(c_dim, affine=True, track_running_stats=True),
+            nn.LeakyReLU(0.01))
 
     def forward(self, x):
         h = self.main(x)
         # real or fake on each patch
-        out_src = self.conv1(h)
+        out_src = self.out_src(h)
         # predicts attributes
-        out_cls = self.conv2(h)
+        out_cls = self.out_cls(h)
         return out_src, out_cls.view(out_cls.size(0), out_cls.size(1))
+
+
+if __name__ == '__main__':
+    """
+    test
+    """
+    # model structure
+    print("Encoder")
+    E = Encoder().cuda()
+    print(E)
+    print('\n')
+
+    print("Transformer")
+    T = Transformer().cuda()
+    print(T)
+    print('\n')
+
+    print("Reconstructor")
+    R = Reconstructor().cuda()
+    print(R)
+    print('\n')
+
+    print("Discriminator")
+    D = Discriminator().cuda()
+    print(D)
+    print('\n')
+
+    # tensor flow
+    x = torch.randn(8, 3, 128, 128).cuda()
+    c = torch.randn(8, 5).cuda()
+    print("The size of input image: {}".format(x.size()))
+    print("The size of input label: {}".format(c.size()))
+
+    out = E(x)
+    print("The size of Encoder output: {}".format(out.size()))
+
+    out = T(out, c)
+    print("The size of Transformer output: {}".format(out.size()))
+
+    out = R(out)
+    print("The size of Reconstructor output: {}".format(out.size()))
+
+    out_src, out_cls = D(out)
+    print("The size of src out: {}".format(out_src.size()))
+    print("The size of cls out: {}".format(out_cls.size()))
