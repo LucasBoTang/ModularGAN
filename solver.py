@@ -88,10 +88,28 @@ class Solver(object):
             self.D.append(Discriminator(image_size=self.image_size, conv_dim=self.d_conv_dim, c_dim=c_dim, repeat_num=self.d_repeat_num))
         self.D.to(self.device)
 
+        # optimizer
         self.g_optimizer = torch.optim.Adam(list(self.E.parameters())+list(self.T.parameters())+list(self.R.parameters()), self.g_lr, [self.beta1, self.beta2])
         self.d_optimizer = torch.optim.Adam(self.D.parameters(), self.d_lr, [self.beta1, self.beta2])
 
+        # print information
+        self.print_network('Encoder', self.E)
+        self.print_network('Transformers', self.T)
+        self.print_network('Reconstructor', self.R)
+        self.print_network('Discriminators', self.D)
+
+        # move to device
         self.E.to(self.device)
         self.T.to(self.device)
         self.R.to(self.device)
         self.D.to(self.device)
+
+    def print_network(self, name, model):
+        """
+        print out the network information
+        """
+        num_params = 0
+        for p in model.parameters():
+            num_params += p.numel()
+        # print(model)
+        print("The number of parameters: {} in {}".format(num_params, name))
