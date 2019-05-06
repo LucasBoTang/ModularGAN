@@ -24,7 +24,7 @@ class Solver(object):
         # model configurations
         self.image_size = config.image_size
         self.e_conv_dim = config.e_conv_dim
-        self.r_conv_dim = config.r_conv_dim
+        self.d_conv_dim = config.d_conv_dim
         self.e_repeat_num = config.e_repeat_num
         self.t_repeat_num = config.t_repeat_num
         self.d_repeat_num = config.d_repeat_num
@@ -75,20 +75,23 @@ class Solver(object):
         """
         # create modulars
         self.E = Encoder(conv_dim=self.e_conv_dim, repeat_num=self.e_repeat_num)
-        self.E.to(self.device)
 
         self.T = torch.nn.ModuleList()
         for c_dim in self.attr_dims:
             self.T.append(Transformer(conv_dim=self.e_conv_dim*4, c_dim=c_dim, repeat_num=self.t_repeat_num))
-        self.T.to(self.device)
 
-        self.R = Reconstructor(conv_dim=self.r_conv_dim)
+        self.R = Reconstructor(conv_dim=self.e_conv_dim*4)
         self.R.to(self.device)
 
         self.D = torch.nn.ModuleList()
         for c_dim in self.attr_dims:
-            self.D.append(Discriminator(image_size=self.image_size, conv_dim=self.r_conv_dim, c_dim=c_dim, repeat_num=self.r_conv_dim))
+            self.D.append(Discriminator(image_size=self.image_size, conv_dim=self.d_conv_dim, c_dim=c_dim, repeat_num=self.d_repeat_num))
         self.D.to(self.device)
 
         self.g_optimizer = torch.optim.Adam(list(self.E.parameters())+list(self.T.parameters())+list(self.R.parameters()), self.g_lr, [self.beta1, self.beta2])
         self.d_optimizer = torch.optim.Adam(self.D.parameters(), self.d_lr, [self.beta1, self.beta2])
+
+        self.E.to(self.device)
+        self.T.to(self.device)
+        self.R.to(self.device)
+        self.D.to(self.device)
