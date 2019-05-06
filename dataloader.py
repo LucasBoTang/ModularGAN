@@ -77,7 +77,7 @@ class Loader(data.Dataset):
         return self.num_images
 
 
-def get_loader(image_dir='D:/Data/celeba/images', attr_path='D:/Data/celeba/list_attr_celeba.txt',
+def get_loader(image_dir='./data/celeba/images', attr_path='./data/celeba/list_attr_celeba.txt',
                selected_attrs=['Black_Hair', 'Blond_Hair', 'Brown_Hair', 'Male', 'Young'],
                crop_size=178, image_size=128, batch_size=8, mode='train', num_workers=1):
     """
