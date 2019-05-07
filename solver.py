@@ -4,6 +4,7 @@ from torchvision.utils import save_image
 import torch
 import torch.nn.functional as F
 import numpy as np
+from tqdm import tqdm
 import os
 import time
 import datetime
@@ -14,14 +15,12 @@ class Solver(object):
     solver for training and testing ModularGAN
     """
 
-    def __init__(self, data_loader, config):
+    def __init__(self, config):
         """
         initialize configurations from argument
         """
-        # data loader
-        self.data_loader = data_loader
-
         # model configurations
+        self.crop_size = config.crop_size
         self.image_size = config.image_size
         self.e_conv_dim = config.e_conv_dim
         self.d_conv_dim = config.d_conv_dim
@@ -48,11 +47,15 @@ class Solver(object):
         # test configurations
         self.test_iters = config.test_iters
 
-        # miscellaneous.
+        # miscellaneous
+        self.mode = config.mode
+        self.num_workers = config.num_workers
         self.use_tensorboard = config.use_tensorboard
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         # directories
+        self.image_dir = config.image_dir
+        self.attr_path = config.attr_path
         self.log_dir = config.log_dir
         self.sample_dir = config.sample_dir
         self.model_save_dir = config.model_save_dir
@@ -64,10 +67,29 @@ class Solver(object):
         self.model_save_step = config.model_save_step
         self.lr_update_step = config.lr_update_step
 
+        # build data loader
+        self.data_loaders = self.build_loaders()
+
         # build the model and tensorboard
         self.build_model()
-        #if self.use_tensorboard:
-        #    self.build_tensorboard()
+        if self.use_tensorboard:
+            self.build_tensorboard()
+
+    def build_loaders(self):
+        """
+        build data loader for different modulars
+        """
+        from dataloader import get_loader
+        data_loaders = []
+        ind = 0
+        for c_dim in self.attr_dims:
+            selected_attrs = self.selected_attrs[ind:ind+c_dim]
+            loader = get_loader(self.image_dir, self.attr_path, selected_attrs,
+                                self.crop_size, self.image_size, self.batch_size,
+                                self.mode, self.num_workers)
+            data_loaders.append(iter(loader))
+            ind += c_dim
+        return data_loaders
 
     def build_model(self):
         """
@@ -97,6 +119,7 @@ class Solver(object):
         self.print_network('Transformers', self.T)
         self.print_network('Reconstructor', self.R)
         self.print_network('Discriminators', self.D)
+        print('\n')
 
         # move to device
         self.E.to(self.device)
@@ -113,3 +136,51 @@ class Solver(object):
             num_params += p.numel()
         # print(model)
         print("The number of parameters: {} in {}".format(num_params, name))
+
+    def build_tensorboard(self):
+        """
+        build a tensorboard logger
+        """
+        from logger import Logger
+        self.logger = Logger(self.log_dir)
+
+    def restore_model(self, resume_iters):
+        """
+        restore the trained model
+        """
+        print('Loading the trained models from step {}...'.format(resume_iters))
+        E_path = os.path.join(self.model_save_dir, '{}-E.ckpt'.format(resume_iters))
+        T_path = os.path.join(self.model_save_dir, '{}-T.ckpt'.format(resume_iters))
+        R_path = os.path.join(self.model_save_dir, '{}-R.ckpt'.format(resume_iters))
+        D_path = os.path.join(self.model_save_dir, '{}-D.ckpt'.format(resume_iters))
+        self.E.load_state_dict(torch.load(E_path, map_location=lambda storage, loc: storage))
+        self.T.load_state_dict(torch.load(E_path, map_location=lambda storage, loc: storage))
+        self.R.load_state_dict(torch.load(E_path, map_location=lambda storage, loc: storage))
+        self.D.load_state_dict(torch.load(D_path, map_location=lambda storage, loc: storage))
+
+    def train(self):
+        """
+        train model
+        """
+        # initialize learning rate and decay later
+        g_lr = self.g_lr
+        d_lr = self.d_lr
+
+        # start training from scratch or resume training.
+        start_iters = 0
+        if self.resume_iters:
+            start_iters = self.resume_iters
+            self.restore_model(self.resume_iters)
+
+        # start training
+        print('Start training...')
+        start_time = time.time()
+        tbar = tqdm(range(start_iters, self.num_iters))
+        for i in tbar:
+
+            # =================================================================================== #
+            #                             1. Preprocess input data                                #
+            # =================================================================================== #
+            x_real, label_org = next(self.data_loaders[0])
+            print(label_org)
+            break

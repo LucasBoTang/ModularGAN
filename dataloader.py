@@ -35,12 +35,14 @@ class Loader(data.Dataset):
         """
         lines = [line.rstrip() for line in open(self.attr_path, 'r')]
         all_attr_names = lines[1].split()
+
+        cnt = 0
         for i, attr_name in enumerate(all_attr_names):
             self.attr2idx[attr_name] = i
             self.idx2attr[i] = attr_name
 
         lines = lines[2:]
-        random.seed(1234)
+        random.seed(135)
         random.shuffle(lines)
         for i, line in enumerate(lines):
             split = line.split()
@@ -52,14 +54,20 @@ class Loader(data.Dataset):
                 idx = self.attr2idx[attr_name]
                 label.append(values[idx] == '1')
 
-            if (i+1) < 2000:
+            # avoid ambiguous label
+            if len(self.selected_attrs) > 1 and not any(label):
+                continue
+            cnt += 1
+
+            if cnt < 2000:
                 self.test_dataset.append([filename, label])
             else:
                 self.train_dataset.append([filename, label])
 
-        print('Finished preprocessing the CelebA dataset...')
+        print('Build dataset with attribute:', ' '.join(self.selected_attrs))
         print("Train dataset: {} images.".format(len(self.train_dataset)))
         print("Test dataset: {} images.".format(len(self.test_dataset)))
+        print('\n')
 
     def __getitem__(self, index):
         """
@@ -78,7 +86,7 @@ class Loader(data.Dataset):
 
 
 def get_loader(image_dir='./data/celeba/images', attr_path='./data/celeba/list_attr_celeba.txt',
-               selected_attrs=['Black_Hair', 'Blond_Hair', 'Brown_Hair', 'Male', 'Young'],
+               selected_attrs=['Black_Hair', 'Blond_Hair', 'Brown_Hair'],
                crop_size=178, image_size=128, batch_size=8, mode='train', num_workers=1):
     """
     Build a data loader
@@ -102,7 +110,7 @@ def get_loader(image_dir='./data/celeba/images', attr_path='./data/celeba/list_a
 
 if __name__ == '__main__':
     """
-    test
+    test code
     """
     data_loader = get_loader()
     data_iter = iter(data_loader)
