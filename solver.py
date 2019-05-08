@@ -8,6 +8,7 @@ from tqdm import tqdm
 import os
 import time
 import datetime
+import random
 
 
 class Solver(object):
@@ -31,6 +32,7 @@ class Solver(object):
         self.lambda_rec = config.lambda_rec
         self.lambda_gp = config.lambda_gp
         self.attr_dims = config.attr_dims
+        self.transformer_num = len(self.attr_dims)
         self.selected_attrs = config.selected_attrs
 
         # training configurations
@@ -51,7 +53,7 @@ class Solver(object):
         self.mode = config.mode
         self.num_workers = config.num_workers
         self.use_tensorboard = config.use_tensorboard
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = self.get_device()
 
         # directories
         self.image_dir = config.image_dir
@@ -75,18 +77,35 @@ class Solver(object):
         if self.use_tensorboard:
             self.build_tensorboard()
 
+    def get_device(self):
+        """
+        get device
+        """
+        if torch.cuda.is_available():
+            device = torch.device('cuda')
+            print('Device:')
+            for i in range(torch.cuda.device_count()):
+                print('    {}:'.format(i), torch.cuda.get_device_name(i))
+        else:
+            device = torch.device('cpu')
+            print('Device: CPU')
+        print('\n')
+        return device
+
     def build_loaders(self):
         """
         build data loader for different modulars
         """
         from dataloader import get_loader
+        random.seed(135)
         data_loaders = []
         ind = 0
         for c_dim in self.attr_dims:
+            seed = random.randint(0, 200)
             selected_attrs = self.selected_attrs[ind:ind+c_dim]
             loader = get_loader(self.image_dir, self.attr_path, selected_attrs,
                                 self.crop_size, self.image_size, self.batch_size,
-                                self.mode, self.num_workers)
+                                self.mode, self.num_workers, seed)
             data_loaders.append(iter(loader))
             ind += c_dim
         return data_loaders
@@ -177,10 +196,42 @@ class Solver(object):
         start_time = time.time()
         tbar = tqdm(range(start_iters, self.num_iters))
         for i in tbar:
+            for j in range(self.transformer_num):
 
-            # =================================================================================== #
-            #                             1. Preprocess input data                                #
-            # =================================================================================== #
-            x_real, label_org = next(self.data_loaders[0])
-            print(label_org)
+                # =================================================================================== #
+                #                             1. Preprocess input data                                #
+                # =================================================================================== #
+
+                # get data and domain label
+                x_real, c_org_t = next(self.data_loaders[j])
+                # generate target domain labels for transform randomly
+                if c_org_t.size(1) > 1:
+                    # randomly shuffle
+                    c_trg_t = c_org_t[torch.randperm(c_org_t.size(0))]
+                else:
+                    # reverse value
+                    c_trg_t = 1 - c_org_t
+
+                # copy domain labels for computing classification loss
+                c_org_l = c_org_t.clone()
+                c_trg_l = c_trg_t.clone()
+
+                # to device
+                x_real = x_real.to(self.device)
+                c_org_t = c_org_t.to(self.device)
+                c_trg_t = c_trg_t.to(self.device)
+                c_org_l = c_org_l.to(self.device)
+                c_trg_l = c_trg_l.to(self.device)
+
+                # =================================================================================== #
+                #                             2. Train the discriminator                              #
+                # =================================================================================== #
+
+                # Compute loss with real images.
+                out_src, out_cls = self.D[j](x_real)
+                d_loss_real = - torch.mean(out_src)
+                d_loss_cls = F.binary_cross_entropy_with_logits(out_cls, c_org_l, size_average=False) / c_org_l.size(0)
+                print(d_loss_real)
+                print(d_loss_cls)
+
             break

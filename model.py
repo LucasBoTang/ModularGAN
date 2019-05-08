@@ -200,6 +200,6 @@ if __name__ == '__main__':
     out = R(out)
     print("The size of Reconstructor output: {}".format(out.size()))
 
-    out_src, out_cls = D(out)
+    out_src, out_cls = D(x)
     print("The size of src out: {}".format(out_src.size()))
     print("The size of cls out: {}".format(out_cls.size()))
