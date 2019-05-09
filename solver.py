@@ -177,6 +177,30 @@ class Solver(object):
         self.R.load_state_dict(torch.load(E_path, map_location=lambda storage, loc: storage))
         self.D.load_state_dict(torch.load(D_path, map_location=lambda storage, loc: storage))
 
+    def gradient_penalty(self, y, x):
+        """
+        gradient penalty for Wasserstein GAN
+        (L2_norm(dy/dx) - 1)**2
+        """
+        weight = torch.ones(y.size()).to(self.device)
+        dydx = torch.autograd.grad(outputs=y,
+                                   inputs=x,
+                                   grad_outputs=weight,
+                                   retain_graph=True,
+                                   create_graph=True,
+                                   only_inputs=True)[0]
+
+        dydx = dydx.view(dydx.size(0), -1)
+        dydx_l2norm = torch.sqrt(torch.sum(dydx ** 2, dim=1))
+        return torch.mean((dydx_l2norm - 1) ** 2)
+
+    def reset_grad(self):
+        """
+        reset the gradient to zero
+        """
+        self.g_optimizer.zero_grad()
+        self.d_optimizer.zero_grad()
+
     def train(self):
         """
         train model
@@ -223,15 +247,88 @@ class Solver(object):
                 c_org_l = c_org_l.to(self.device)
                 c_trg_l = c_trg_l.to(self.device)
 
+                # generate fake images
+                x_fake = self.R(self.T[j](self.E(x_real), c_trg_t))
+
                 # =================================================================================== #
                 #                             2. Train the discriminator                              #
                 # =================================================================================== #
 
-                # Compute loss with real images.
+                # compute loss with real images
                 out_src, out_cls = self.D[j](x_real)
                 d_loss_real = - torch.mean(out_src)
-                d_loss_cls = F.binary_cross_entropy_with_logits(out_cls, c_org_l, size_average=False) / c_org_l.size(0)
-                print(d_loss_real)
-                print(d_loss_cls)
+                d_loss_cls = F.binary_cross_entropy_with_logits(out_cls, c_org_l, size_average=False) / self.batch_size
+
+                # compute loss with fake images
+                out_src, _ = self.D[j](x_fake.detach())
+                d_loss_fake = torch.mean(out_src)
+
+                # compute loss for gradient penalty.
+                alpha = torch.rand(x_real.size(0), 1, 1, 1).to(self.device)
+                x_hat = (alpha * x_real.data + (1 - alpha) * x_fake.data).requires_grad_(True)
+                out_src, _ = self.D[j](x_hat)
+                d_loss_gp = self.gradient_penalty(out_src, x_hat)
+
+                # compute discrimination loss
+                d_loss = d_loss_real + d_loss_fake + self.lambda_gp * d_loss_gp + self.lambda_cls * d_loss_cls
+
+                # backward and optimize
+                self.reset_grad()
+                d_loss.backward()
+                self.d_optimizer.step()
+
+                # log in
+                loss = {}
+                loss['D{}_loss_real'.format(j)] = d_loss_real.item()
+                loss['D{}_loss_fake'.format(j)] = d_loss_fake.item()
+                loss['D{}_loss_cls'.format(j)] = d_loss_cls.item()
+                loss['D{}_loss_gp'.format(j)] = d_loss_gp.item()
+
+                # =================================================================================== #
+                #                               3. Train the generator                                #
+                # =================================================================================== #
+
+                if (i+1) % self.n_critic == 0:
+
+                    # compute loss with fake images
+                    out_src, out_cls = self.D[j](x_fake)
+                    g_loss_fake = - torch.mean(out_src)
+                    g_loss_cls = F.binary_cross_entropy_with_logits(out_cls, c_trg_l, size_average=False) / self.batch_size
+
+                    # compute loss with cyclic reconstruction
+                    x_rec = self.R(self.E(x_real))
+                    f_trs = self.T[i](self.E(x_real), c_trg_t)
+                    f_rec = self.E(x_fake)
+                    g_loss_rec = torch.mean(torch.abs(x_real - x_rec)) / self.transformer_num + torch.mean(torch.abs(f_trs - f_rec))
+
+                    # compute generation loss
+                    g_loss = g_loss_fake + self.lambda_rec * g_loss_rec + self.lambda_cls * g_loss_cls
+
+                    # backward and optimize
+                    self.reset_grad()
+                    g_loss.backward()
+                    self.g_optimizer.step()
+
+                    # Logging.
+                    loss['G{}_loss_fake'.format(j)] = g_loss_fake.item()
+                    loss['G{}_loss_rec'.format(j)] = g_loss_rec.item()
+                    loss['G{}_loss_cls'.format(j)] = g_loss_cls.item()
+
+                # =================================================================================== #
+                #                                 4. Miscellaneous                                    #
+                # =================================================================================== #
+
+                # show the training information
+                if (i+1) % self.log_step == 0:
+                    et = time.time() - start_time
+                    et = str(datetime.timedelta(seconds=et))[:-7]
+                    log = "Elapsed [{}], Iteration [{}/{}]".format(et, i+1, self.num_iters)
+                    for tag, value in loss.items():
+                        log += ", {}: {:.4f}".format(tag, value)
+                    print(log)
+
+                    if self.use_tensorboard:
+                        for tag, value in loss.items():
+                            self.logger.scalar_summary(tag, value, i+1)
 
             break
