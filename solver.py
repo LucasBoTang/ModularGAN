@@ -12,14 +12,14 @@ import random
 
 
 class Solver(object):
-    """
+    '''
     solver for training and testing ModularGAN
-    """
+    '''
 
     def __init__(self, config):
-        """
+        '''
         initialize configurations from argument
-        """
+        '''
         # model configurations
         self.crop_size = config.crop_size
         self.image_size = config.image_size
@@ -78,9 +78,9 @@ class Solver(object):
             self.build_tensorboard()
 
     def get_device(self):
-        """
+        '''
         get device
-        """
+        '''
         if torch.cuda.is_available():
             device = torch.device('cuda')
             print('Device:')
@@ -93,9 +93,9 @@ class Solver(object):
         return device
 
     def build_loaders(self):
-        """
+        '''
         build data loader for different modulars
-        """
+        '''
         from dataloader import get_loader
         random.seed(135)
         data_loaders = []
@@ -111,9 +111,9 @@ class Solver(object):
         return data_loaders
 
     def build_model(self):
-        """
+        '''
         create network modulars
-        """
+        '''
         # create modulars
         self.E = Encoder(conv_dim=self.e_conv_dim, repeat_num=self.e_repeat_num)
 
@@ -147,26 +147,43 @@ class Solver(object):
         self.D.to(self.device)
 
     def print_network(self, name, model):
-        """
+        '''
         print out the network information
-        """
+        '''
         num_params = 0
         for p in model.parameters():
             num_params += p.numel()
         # print(model)
-        print("The number of parameters: {} in {}".format(num_params, name))
+        print('The number of parameters: {} in {}'.format(num_params, name))
 
     def build_tensorboard(self):
-        """
+        '''
         build a tensorboard logger
-        """
+        '''
         from logger import Logger
         self.logger = Logger(self.log_dir)
 
+    def create_labels(self):
+        '''
+        generate target domain labels for debugging and testing
+        '''
+        label_list = []
+        for c_dim in self.attr_dims:
+            if c_dim > 1:
+                labels = []
+                for i in range(c_dim):
+                    label = torch.zeros([4, c_dim]).to(self.device)
+                    label[:,i] = 1
+                    labels.append(label)
+            else:
+                labels = [torch.zeros([4, 1]).to(self.device), torch.ones([4, 1]).to(self.device)]
+            label_list.append(labels)
+        return label_list
+
     def restore_model(self, resume_iters):
-        """
+        '''
         restore the trained model
-        """
+        '''
         print('Loading the trained models from step {}...'.format(resume_iters))
         E_path = os.path.join(self.model_save_dir, '{}-E.ckpt'.format(resume_iters))
         T_path = os.path.join(self.model_save_dir, '{}-T.ckpt'.format(resume_iters))
@@ -178,10 +195,10 @@ class Solver(object):
         self.D.load_state_dict(torch.load(D_path, map_location=lambda storage, loc: storage))
 
     def gradient_penalty(self, y, x):
-        """
+        '''
         gradient penalty for Wasserstein GAN
         (L2_norm(dy/dx) - 1)**2
-        """
+        '''
         weight = torch.ones(y.size()).to(self.device)
         dydx = torch.autograd.grad(outputs=y,
                                    inputs=x,
@@ -195,19 +212,40 @@ class Solver(object):
         return torch.mean((dydx_l2norm - 1) ** 2)
 
     def reset_grad(self):
-        """
+        '''
         reset the gradient to zero
-        """
+        '''
         self.g_optimizer.zero_grad()
         self.d_optimizer.zero_grad()
 
+    def denorm(self, x):
+        """
+        convert the range from [-1, 1] to [0, 1]
+        """
+        out = (x + 1) / 2
+        return out.clamp_(0, 1)
+
+    def update_lr(self, g_lr, d_lr):
+        """
+        decay learning rates of the generator and discriminator
+        """
+        for param_group in self.g_optimizer.param_groups:
+            param_group['lr'] = g_lr
+        for param_group in self.d_optimizer.param_groups:
+            param_group['lr'] = d_lr
+
     def train(self):
-        """
+        '''
         train model
-        """
+        '''
         # initialize learning rate and decay later
         g_lr = self.g_lr
         d_lr = self.d_lr
+
+        # fetch 4 fixed images for debugging
+        x_fixed, c_org = next(iter(self.data_loaders[0]))
+        x_fixed = x_fixed.to(self.device)[:4]
+        c_fixed_list = self.create_labels()
 
         # start training from scratch or resume training.
         start_iters = 0
@@ -220,11 +258,14 @@ class Solver(object):
         start_time = time.time()
         tbar = tqdm(range(start_iters, self.num_iters))
         for i in tbar:
+
+            total_g_loss = 0
+            loss = {}
             for j in range(self.transformer_num):
 
-                # =================================================================================== #
-                #                             1. Preprocess input data                                #
-                # =================================================================================== #
+            # =================================================================================== #
+            #                             1. Preprocess input data                                #
+            # =================================================================================== #
 
                 # get data and domain label
                 x_real, c_org_t = next(self.data_loaders[j])
@@ -250,9 +291,9 @@ class Solver(object):
                 # generate fake images
                 x_fake = self.R(self.T[j](self.E(x_real), c_trg_t))
 
-                # =================================================================================== #
-                #                             2. Train the discriminator                              #
-                # =================================================================================== #
+            # =================================================================================== #
+            #                             2. Train the discriminator                              #
+            # =================================================================================== #
 
                 # compute loss with real images
                 out_src, out_cls = self.D[j](x_real)
@@ -278,17 +319,16 @@ class Solver(object):
                 self.d_optimizer.step()
 
                 # log in
-                loss = {}
                 loss['D{}_loss_real'.format(j)] = d_loss_real.item()
                 loss['D{}_loss_fake'.format(j)] = d_loss_fake.item()
                 loss['D{}_loss_cls'.format(j)] = d_loss_cls.item()
                 loss['D{}_loss_gp'.format(j)] = d_loss_gp.item()
 
-                # =================================================================================== #
-                #                               3. Train the generator                                #
-                # =================================================================================== #
+            # =================================================================================== #
+            #                               3. Train the generator                                #
+            # =================================================================================== #
 
-                if (i+1) % self.n_critic == 0:
+                if i and i % self.n_critic == 0:
 
                     # compute loss with fake images
                     out_src, out_cls = self.D[j](x_fake)
@@ -297,38 +337,71 @@ class Solver(object):
 
                     # compute loss with cyclic reconstruction
                     x_rec = self.R(self.E(x_real))
-                    f_trs = self.T[i](self.E(x_real), c_trg_t)
+                    f_trs = self.T[j](self.E(x_real), c_trg_t)
                     f_rec = self.E(x_fake)
                     g_loss_rec = torch.mean(torch.abs(x_real - x_rec)) / self.transformer_num + torch.mean(torch.abs(f_trs - f_rec))
 
                     # compute generation loss
                     g_loss = g_loss_fake + self.lambda_rec * g_loss_rec + self.lambda_cls * g_loss_cls
 
-                    # backward and optimize
+                     # backward and optimize
                     self.reset_grad()
                     g_loss.backward()
                     self.g_optimizer.step()
 
                     # Logging.
+                    total_g_loss += g_loss
                     loss['G{}_loss_fake'.format(j)] = g_loss_fake.item()
                     loss['G{}_loss_rec'.format(j)] = g_loss_rec.item()
                     loss['G{}_loss_cls'.format(j)] = g_loss_cls.item()
 
-                # =================================================================================== #
-                #                                 4. Miscellaneous                                    #
-                # =================================================================================== #
+            # =================================================================================== #
+            #                                 4. Miscellaneous                                    #
+            # =================================================================================== #
 
-                # show the training information
-                if (i+1) % self.log_step == 0:
-                    et = time.time() - start_time
-                    et = str(datetime.timedelta(seconds=et))[:-7]
-                    log = "Elapsed [{}], Iteration [{}/{}]".format(et, i+1, self.num_iters)
+            # show the training information
+            if i and i % self.log_step == 0:
+                et = time.time() - start_time
+                et = str(datetime.timedelta(seconds=et))[:-7]
+                log = 'Elapsed [{}], Iteration [{}/{}]'.format(et, i, self.num_iters)
+                for tag, value in loss.items():
+                    log += ', {}: {:.4f}'.format(tag, value)
+                tbar.set_description('Generator loss: {:3f}'.format(total_g_loss / self.transformer_num))
+
+                if self.use_tensorboard:
                     for tag, value in loss.items():
-                        log += ", {}: {:.4f}".format(tag, value)
-                    print(log)
+                        self.logger.scalar_summary(tag, value, i)
 
-                    if self.use_tensorboard:
-                        for tag, value in loss.items():
-                            self.logger.scalar_summary(tag, value, i+1)
+            # translate fixed images for debugging
+            if i and i % self.sample_step == 0:
+                with torch.no_grad():
+                    x_list = [x_fixed]
+                    for j in range(len(c_fixed_list)):
+                        for c_fixed in c_fixed_list[j]:
+                            x_fake = self.R(self.T[j](self.E(x_fixed), c_fixed))
+                            x_list.append(x_fake)
+                    x_concat = torch.cat(x_list, dim=3)
+                sample_path = os.path.join(self.sample_dir, '{}-images.jpg'.format(i))
+                save_image(self.denorm(x_concat.data.cpu()), sample_path, nrow=1, padding=0)
+                print('Saved real and fake images into {}...'.format(sample_path))
 
-            break
+            # save checkpoints
+            if i and i % self.model_save_step == 0:
+                E_path = os.path.join(self.model_save_dir, '{}-E.ckpt'.format(i))
+                T_path = os.path.join(self.model_save_dir, '{}-T.ckpt'.format(i))
+                R_path = os.path.join(self.model_save_dir, '{}-R.ckpt'.format(i))
+                D_path = os.path.join(self.model_save_dir, '{}-D.ckpt'.format(i))
+                torch.save(self.E.state_dict(), E_path)
+                torch.save(self.T.state_dict(), T_path)
+                torch.save(self.R.state_dict(), R_path)
+                torch.save(self.D.state_dict(), D_path)
+                print('Saved model checkpoints into {}...'.format(self.model_save_dir))
+
+            # Decay learning rates
+            if i % self.lr_update_step == 0 and i > self.num_iters - self.num_iters_decay:
+                g_lr -= (self.g_lr / float(self.num_iters_decay))
+                d_lr -= (self.d_lr / float(self.num_iters_decay))
+                self.update_lr(g_lr, d_lr)
+                print ('Decayed learning rates, g_lr: {}, d_lr: {}.'.format(g_lr, d_lr))
+
+            #break
