@@ -37,7 +37,6 @@ class Loader(data.Dataset):
         lines = [line.rstrip() for line in open(self.attr_path, 'r')]
         all_attr_names = lines[1].split()
 
-        cnt = 0
         for i, attr_name in enumerate(all_attr_names):
             self.attr2idx[attr_name] = i
             self.idx2attr[i] = attr_name
@@ -45,6 +44,7 @@ class Loader(data.Dataset):
         lines = lines[2:]
         random.seed(self.seed)
         random.shuffle(lines)
+        cnt = 0
         for i, line in enumerate(lines):
             split = line.split()
             filename = split[0]
