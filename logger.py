@@ -3,7 +3,8 @@ import tensorflow as tf
 
 class Logger(object):
     """
-    Tensorboard logger"""
+    tensorboard logger
+    """
 
     def __init__(self, log_dir):
         """

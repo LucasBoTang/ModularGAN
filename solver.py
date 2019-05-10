@@ -12,14 +12,14 @@ import random
 
 
 class Solver(object):
-    '''
+    """
     solver for training and testing ModularGAN
-    '''
+    """
 
     def __init__(self, config):
-        '''
+        """
         initialize configurations from argument
-        '''
+        """
         # model configurations
         self.crop_size = config.crop_size
         self.image_size = config.image_size
@@ -78,9 +78,9 @@ class Solver(object):
             self.build_tensorboard()
 
     def get_device(self):
-        '''
+        """
         get device
-        '''
+        """
         if torch.cuda.is_available():
             device = torch.device('cuda')
             print('Device:')
@@ -93,9 +93,9 @@ class Solver(object):
         return device
 
     def build_loaders(self):
-        '''
+        """
         build data loader for different modulars
-        '''
+        """
         from dataloader import get_loader
         random.seed(135)
         data_loaders = []
@@ -111,9 +111,9 @@ class Solver(object):
         return data_loaders
 
     def build_model(self):
-        '''
+        """
         create network modulars
-        '''
+        """
         # create modulars
         self.E = Encoder(conv_dim=self.e_conv_dim, repeat_num=self.e_repeat_num)
 
@@ -147,9 +147,9 @@ class Solver(object):
         self.D.to(self.device)
 
     def print_network(self, name, model):
-        '''
+        """
         print out the network information
-        '''
+        """
         num_params = 0
         for p in model.parameters():
             num_params += p.numel()
@@ -157,16 +157,16 @@ class Solver(object):
         print('The number of parameters: {} in {}'.format(num_params, name))
 
     def build_tensorboard(self):
-        '''
+        """
         build a tensorboard logger
-        '''
+        """
         from logger import Logger
         self.logger = Logger(self.log_dir)
 
     def create_labels(self):
-        '''
+        """
         generate target domain labels for debugging and testing
-        '''
+        """
         label_list = []
         for c_dim in self.attr_dims:
             if c_dim > 1:
@@ -181,9 +181,9 @@ class Solver(object):
         return label_list
 
     def restore_model(self, resume_iters):
-        '''
+        """
         restore the trained model
-        '''
+        """
         print('Loading the trained models from step {}...'.format(resume_iters))
         E_path = os.path.join(self.model_save_dir, '{}-E.ckpt'.format(resume_iters))
         T_path = os.path.join(self.model_save_dir, '{}-T.ckpt'.format(resume_iters))
@@ -195,10 +195,10 @@ class Solver(object):
         self.D.load_state_dict(torch.load(D_path, map_location=lambda storage, loc: storage))
 
     def gradient_penalty(self, y, x):
-        '''
+        """
         gradient penalty for Wasserstein GAN
         (L2_norm(dy/dx) - 1)**2
-        '''
+        """
         weight = torch.ones(y.size()).to(self.device)
         dydx = torch.autograd.grad(outputs=y,
                                    inputs=x,
@@ -212,9 +212,9 @@ class Solver(object):
         return torch.mean((dydx_l2norm - 1) ** 2)
 
     def reset_grad(self):
-        '''
+        """
         reset the gradient to zero
-        '''
+        """
         self.g_optimizer.zero_grad()
         self.d_optimizer.zero_grad()
 
@@ -235,9 +235,9 @@ class Solver(object):
             param_group['lr'] = d_lr
 
     def train(self):
-        '''
+        """
         train model
-        '''
+        """
         # initialize learning rate and decay later
         g_lr = self.g_lr
         d_lr = self.d_lr
@@ -259,8 +259,13 @@ class Solver(object):
         tbar = tqdm(range(start_iters, self.num_iters))
         for i in tbar:
 
-            total_g_loss = 0
-            loss = {}
+            # reset loss record
+            total_d_loss = 0
+            d_loss_dict = {'D/loss_src':0, 'D/loss_gp':0}
+            if i and i % self.n_critic == 0:
+                total_g_loss = 0
+                g_loss_dict = {'G/loss_src':0, 'G/loss_rec':0}
+
             for j in range(self.transformer_num):
 
             # =================================================================================== #
@@ -318,11 +323,11 @@ class Solver(object):
                 d_loss.backward()
                 self.d_optimizer.step()
 
-                # log in
-                loss['D{}_loss_real'.format(j)] = d_loss_real.item()
-                loss['D{}_loss_fake'.format(j)] = d_loss_fake.item()
-                loss['D{}_loss_cls'.format(j)] = d_loss_cls.item()
-                loss['D{}_loss_gp'.format(j)] = d_loss_gp.item()
+                # logging
+                total_d_loss += d_loss.item()
+                d_loss_dict['D/loss_src'] = d_loss_dict.get('D_loss_src', 0) + d_loss_real.item() + d_loss_fake.item()
+                d_loss_dict['D/loss_gp'] = d_loss_dict.get('D_loss_gp', 0) + d_loss_gp.item()
+                d_loss_dict['D/loss_cls{}'.format(j)] = d_loss_cls.item()
 
             # =================================================================================== #
             #                               3. Train the generator                                #
@@ -349,11 +354,11 @@ class Solver(object):
                     g_loss.backward()
                     self.g_optimizer.step()
 
-                    # Logging.
-                    total_g_loss += g_loss
-                    loss['G{}_loss_fake'.format(j)] = g_loss_fake.item()
-                    loss['G{}_loss_rec'.format(j)] = g_loss_rec.item()
-                    loss['G{}_loss_cls'.format(j)] = g_loss_cls.item()
+                    # logging
+                    total_g_loss += g_loss.item()
+                    g_loss_dict['G/loss_src'] += g_loss_fake.item()
+                    g_loss_dict['G/loss_rec'] += g_loss_rec.item()
+                    g_loss_dict['G/loss_cls{}'.format(j)] = g_loss_cls.item()
 
             # =================================================================================== #
             #                                 4. Miscellaneous                                    #
@@ -364,9 +369,10 @@ class Solver(object):
                 et = time.time() - start_time
                 et = str(datetime.timedelta(seconds=et))[:-7]
                 log = 'Elapsed [{}], Iteration [{}/{}]'.format(et, i, self.num_iters)
+                loss = {**g_loss_dict, **d_loss_dict}
                 for tag, value in loss.items():
                     log += ', {}: {:.4f}'.format(tag, value)
-                tbar.set_description('Generator loss: {:3f}'.format(total_g_loss / self.transformer_num))
+                tbar.set_description('D_loss: {:2f}, G_loss: {:2f}'.format(total_d_loss, total_g_loss))
 
                 if self.use_tensorboard:
                     for tag, value in loss.items():
