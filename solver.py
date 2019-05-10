@@ -325,8 +325,8 @@ class Solver(object):
 
                 # logging
                 total_d_loss += d_loss.item()
-                d_loss_dict['D/loss_src'] = d_loss_dict.get('D_loss_src', 0) + d_loss_real.item() + d_loss_fake.item()
-                d_loss_dict['D/loss_gp'] = d_loss_dict.get('D_loss_gp', 0) + d_loss_gp.item()
+                d_loss_dict['D/loss_src'] += d_loss_real.item() + d_loss_fake.item()
+                d_loss_dict['D/loss_gp'] += d_loss_gp.item()
                 d_loss_dict['D/loss_cls{}'.format(j)] = d_loss_cls.item()
 
             # =================================================================================== #
