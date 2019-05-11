@@ -278,9 +278,12 @@ class Solver(object):
             # =================================================================================== #
 
                 # get data and domain label
-
-                data_iters[j] = iter[self.data_loaders[j]]
-                x_real, c_org_t = next(data_iters[j])
+                try:
+                    x_real, c_org_t = next(data_iters[j])
+                # avoid StopIteration
+                except:
+                    data_iters[j] = iter(self.data_loaders[j])
+                    x_real, c_org_t = next(data_iters[j])
 
                 # generate target domain labels for transform randomly
                 if c_org_t.size(1) > 1:
