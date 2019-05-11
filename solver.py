@@ -168,15 +168,16 @@ class Solver(object):
         generate target domain labels for debugging and testing
         """
         label_list = []
+        batch = min(self.batch_size, 8)
         for c_dim in self.attr_dims:
             if c_dim > 1:
                 labels = []
                 for i in range(c_dim):
-                    label = torch.zeros([self.batch_size, c_dim]).to(self.device)
+                    label = torch.zeros([batch, c_dim]).to(self.device)
                     label[:,i] = 1
                     labels.append(label)
             else:
-                labels = [torch.zeros([self.batch_size, 1]).to(self.device), torch.ones([self.batch_size, 1]).to(self.device)]
+                labels = [torch.zeros([batch, 1]).to(self.device), torch.ones([batch, 1]).to(self.device)]
             label_list.append(labels)
         return label_list
 
@@ -249,7 +250,7 @@ class Solver(object):
 
         # fetch 4 fixed images for debugging
         x_fixed, c_org = next(iter(self.data_loaders[0]))
-        x_fixed = x_fixed.to(self.device)
+        x_fixed = x_fixed.to(self.device)[:8]
         c_trg_list = self.create_labels()
 
         # start training from scratch or resume training.
@@ -432,7 +433,9 @@ class Solver(object):
         c_trg_list = self.create_labels()
 
         with torch.no_grad():
-            for i, (x_real, c_org) in tqdm(enumerate(self.data_loaders[0])):
+            
+            tbar = tqdm(enumerate(self.data_loaders[0]), total=len(self.data_loaders[0]))
+            for i, (x_real, c_org) in tbar:
 
                 # fecth input images
                 x_real = x_real.to(self.device)
