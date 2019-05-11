@@ -33,15 +33,17 @@ $ bash download.sh data
 ```
 
 #### 3. Training and testing
-- To train the model
+To train the model
 ```bash
 $ python main.py --mode train
 ```
-- To test the model
+
+To test the model
 ```bash
 $ python main.py --mode test --test_iters 100000
 ```
-- To customize configuration
+
+To customize configuration
 
 Cofiguration (e.g. batch size, number of residual blocks) could be customized easily by using argparse.
 
