@@ -106,7 +106,7 @@ class Solver(object):
             loader = get_loader(self.image_dir, self.attr_path, selected_attrs,
                                 self.crop_size, self.image_size, self.batch_size,
                                 self.mode, self.num_workers, seed)
-            data_loaders.append(iter(loader))
+            data_loaders.append(loader)
             ind += c_dim
         return data_loaders
 
@@ -242,6 +242,11 @@ class Solver(object):
         g_lr = self.g_lr
         d_lr = self.d_lr
 
+        # iterate dataset
+        data_iters = []
+        for j in range(self.transformer_num):
+            data_iters.append(iter(self.data_loaders[j]))
+
         # fetch 4 fixed images for debugging
         x_fixed, c_org = next(iter(self.data_loaders[0]))
         x_fixed = x_fixed.to(self.device)[:4]
@@ -273,7 +278,10 @@ class Solver(object):
             # =================================================================================== #
 
                 # get data and domain label
-                x_real, c_org_t = next(self.data_loaders[j])
+
+                data_iters[j] = iter[self.data_loaders[j]]
+                x_real, c_org_t = next(data_iters[j])
+
                 # generate target domain labels for transform randomly
                 if c_org_t.size(1) > 1:
                     # randomly shuffle
