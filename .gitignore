@@ -1,6 +1,5 @@
 
 __pycache__/dataloader.cpython-36.pyc
 *.pyc
-logs/events.out.tfevents.1557512561.DESKTOP-DIN56QO
 *.DESKTOP-DIN56QO
 *.ckpt
