@@ -172,11 +172,11 @@ class Solver(object):
             if c_dim > 1:
                 labels = []
                 for i in range(c_dim):
-                    label = torch.zeros([4, c_dim]).to(self.device)
+                    label = torch.zeros([self.batch_size, c_dim]).to(self.device)
                     label[:,i] = 1
                     labels.append(label)
             else:
-                labels = [torch.zeros([4, 1]).to(self.device), torch.ones([4, 1]).to(self.device)]
+                labels = [torch.zeros([self.batch_size, 1]).to(self.device), torch.ones([self.batch_size, 1]).to(self.device)]
             label_list.append(labels)
         return label_list
 
@@ -190,8 +190,8 @@ class Solver(object):
         R_path = os.path.join(self.model_save_dir, '{}-R.ckpt'.format(resume_iters))
         D_path = os.path.join(self.model_save_dir, '{}-D.ckpt'.format(resume_iters))
         self.E.load_state_dict(torch.load(E_path, map_location=lambda storage, loc: storage))
-        self.T.load_state_dict(torch.load(E_path, map_location=lambda storage, loc: storage))
-        self.R.load_state_dict(torch.load(E_path, map_location=lambda storage, loc: storage))
+        self.T.load_state_dict(torch.load(T_path, map_location=lambda storage, loc: storage))
+        self.R.load_state_dict(torch.load(R_path, map_location=lambda storage, loc: storage))
         self.D.load_state_dict(torch.load(D_path, map_location=lambda storage, loc: storage))
 
     def gradient_penalty(self, y, x):
@@ -249,8 +249,8 @@ class Solver(object):
 
         # fetch 4 fixed images for debugging
         x_fixed, c_org = next(iter(self.data_loaders[0]))
-        x_fixed = x_fixed.to(self.device)[:4]
-        c_fixed_list = self.create_labels()
+        x_fixed = x_fixed.to(self.device)
+        c_trg_list = self.create_labels()
 
         # start training from scratch or resume training.
         start_iters = 0
@@ -393,14 +393,14 @@ class Solver(object):
             if i and i % self.sample_step == 0:
                 with torch.no_grad():
                     x_list = [x_fixed]
-                    for j in range(len(c_fixed_list)):
-                        for c_fixed in c_fixed_list[j]:
-                            x_fake = self.R(self.T[j](self.E(x_fixed), c_fixed))
+                    for j in range(len(c_trg_list)):
+                        for c_trg in c_trg_list[j]:
+                            x_fake = self.R(self.T[j](self.E(x_fixed), c_trg))
                             x_list.append(x_fake)
                     x_concat = torch.cat(x_list, dim=3)
-                sample_path = os.path.join(self.sample_dir, '{}-images.jpg'.format(i))
-                save_image(self.denorm(x_concat.data.cpu()), sample_path, nrow=1, padding=0)
-                print('Saved real and fake images into {}...'.format(sample_path))
+                    sample_path = os.path.join(self.sample_dir, '{}-images.jpg'.format(i))
+                    save_image(self.denorm(x_concat.data.cpu()), sample_path, nrow=1, padding=0)
+                    print('Saved real and fake images into {}...'.format(sample_path))
 
             # save checkpoints
             if i and i % self.model_save_step == 0:
@@ -414,11 +414,38 @@ class Solver(object):
                 torch.save(self.D.state_dict(), D_path)
                 print('Saved model checkpoints into {}...'.format(self.model_save_dir))
 
-            # Decay learning rates
+            # decay learning rates
             if i % self.lr_update_step == 0 and i > self.num_iters - self.num_iters_decay:
                 g_lr -= (self.g_lr / float(self.num_iters_decay))
                 d_lr -= (self.d_lr / float(self.num_iters_decay))
                 self.update_lr(g_lr, d_lr)
                 print ('Decayed learning rates, g_lr: {}, d_lr: {}.'.format(g_lr, d_lr))
 
-            #break
+    def test(self):
+        """
+        translate images using StarGAN trained on a single dataset
+        """
+        # load the trained generator.
+        self.restore_model(self.test_iters)
+
+        # create target domain labels
+        c_trg_list = self.create_labels()
+
+        with torch.no_grad():
+            for i, (x_real, c_org) in tqdm(enumerate(self.data_loaders[0])):
+
+                # fecth input images
+                x_real = x_real.to(self.device)
+
+                # translate images
+                x_list = [x_real]
+                for j in range(len(c_trg_list)):
+                    for c_trg in c_trg_list[j]:
+                        x_fake = self.R(self.T[j](self.E(x_real), c_trg))
+                        x_list.append(x_fake)
+                # save the translated images
+                x_concat = torch.cat(x_list, dim=3)
+                result_path = os.path.join(self.result_dir, '{}-images.jpg'.format(i+1))
+                save_image(self.denorm(x_concat.data.cpu()), result_path, nrow=1, padding=0)
+
+        print('Saved real and fake images into {}...'.format(result_path))

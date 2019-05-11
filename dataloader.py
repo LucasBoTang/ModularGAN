@@ -90,7 +90,7 @@ def get_loader(image_dir='./data/celeba/images', attr_path='./data/celeba/list_a
                selected_attrs=['Black_Hair', 'Blond_Hair', 'Brown_Hair'], crop_size=178,
                image_size=128, batch_size=8, mode='train', num_workers=1, seed=246):
     """
-    Build a data loader
+    build a data loader
     """
     transform = []
     if mode == 'train':
