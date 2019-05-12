@@ -186,11 +186,18 @@ class Solver(object):
         """
         # shuffle
         label_trg = label_org[torch.randperm(label_org.size(0))]
-        # reverse
         ind = 0
         for i, c_dim in enumerate(self.attr_dims):
+            # reverse
             if c_dim == 1:
                 label_trg[:,ind] = 1 - label_org[:,ind]
+            # avoid empty label
+            else:
+                for j in range(self.batch_size):
+                    label = label_trg[j,ind:ind+c_dim]
+                    if torch.sum(label) == 0:
+                        label[0] = 1
+                        label[:] = label[torch.randperm(label.size(0))]
             ind += c_dim
         return label_trg
 

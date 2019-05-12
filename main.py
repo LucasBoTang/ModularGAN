@@ -45,9 +45,9 @@ if __name__ == '__main__':
                         help='selected attributes for the CelebA dataset')
 
     # training configuration
-    parser.add_argument('--batch_size', type=int, default=4, help='mini-batch size')
-    parser.add_argument('--num_iters', type=int, default=200000, help='number of total iterations for training D')
-    parser.add_argument('--num_iters_decay', type=int, default=100000, help='number of iterations for decaying lr')
+    parser.add_argument('--batch_size', type=int, default=8, help='mini-batch size')
+    parser.add_argument('--num_iters', type=int, default=400000, help='number of total iterations for training D')
+    parser.add_argument('--num_iters_decay', type=int, default=200000, help='number of iterations for decaying lr')
     parser.add_argument('--g_lr', type=float, default=0.0001, help='learning rate for Generation')
     parser.add_argument('--d_lr', type=float, default=0.0001, help='learning rate for Discrimination')
     parser.add_argument('--n_critic', type=int, default=5, help='number of D updates per each G update')
@@ -56,7 +56,7 @@ if __name__ == '__main__':
     parser.add_argument('--resume_iters', type=int, default=None, help='resume training from this step')
 
     # test configuration
-    parser.add_argument('--test_iters', type=int, default=200000, help='test model from this step')
+    parser.add_argument('--test_iters', type=int, default=400000, help='test model from this step')
 
     # miscellaneous.
     parser.add_argument('--num_workers', type=int, default=1)
