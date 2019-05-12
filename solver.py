@@ -3,12 +3,10 @@ from torch.autograd import Variable
 from torchvision.utils import save_image
 import torch
 import torch.nn.functional as F
-import numpy as np
 from tqdm import tqdm
 import os
 import time
 import datetime
-import random
 
 
 class Solver(object):
@@ -104,18 +102,21 @@ class Solver(object):
 
         self.T = torch.nn.ModuleList()
         for c_dim in self.attr_dims:
-            self.T.append(Transformer(conv_dim=self.e_conv_dim*4, c_dim=c_dim, repeat_num=self.t_repeat_num))
+            self.T.append(Transformer(conv_dim=self.e_conv_dim * 4, c_dim=c_dim, repeat_num=self.t_repeat_num))
 
-        self.R = Reconstructor(conv_dim=self.e_conv_dim*4)
+        self.R = Reconstructor(conv_dim=self.e_conv_dim * 4)
         self.R.to(self.device)
 
         self.D = torch.nn.ModuleList()
         for c_dim in self.attr_dims:
-            self.D.append(Discriminator(image_size=self.image_size, conv_dim=self.d_conv_dim, c_dim=c_dim, repeat_num=self.d_repeat_num))
+            self.D.append(Discriminator(image_size=self.image_size, conv_dim=self.d_conv_dim, c_dim=c_dim,
+                                        repeat_num=self.d_repeat_num))
         self.D.to(self.device)
 
         # optimizer
-        self.g_optimizer = torch.optim.Adam(list(self.E.parameters())+list(self.T.parameters())+list(self.R.parameters()), self.g_lr, [self.beta1, self.beta2])
+        self.g_optimizer = torch.optim.Adam(
+            list(self.E.parameters()) + list(self.T.parameters()) + list(self.R.parameters()), self.g_lr,
+            [self.beta1, self.beta2])
         self.d_optimizer = torch.optim.Adam(self.D.parameters(), self.d_lr, [self.beta1, self.beta2])
 
         # print information
@@ -159,7 +160,7 @@ class Solver(object):
                 labels = []
                 for i in range(c_dim):
                     label = torch.zeros([batch, c_dim]).to(self.device)
-                    label[:,i] = 1
+                    label[:, i] = 1
                     labels.append(label)
             else:
                 labels = [torch.zeros([batch, 1]).to(self.device), torch.ones([batch, 1]).to(self.device)]
@@ -190,11 +191,11 @@ class Solver(object):
         for i, c_dim in enumerate(self.attr_dims):
             # reverse
             if c_dim == 1:
-                label_trg[:,ind] = 1 - label_org[:,ind]
+                label_trg[:, ind] = 1 - label_org[:, ind]
             # avoid empty label
             else:
                 for j in range(self.batch_size):
-                    label = label_trg[j,ind:ind+c_dim]
+                    label = label_trg[j, ind:ind + c_dim]
                     if torch.sum(label) == 0:
                         label[0] = 1
                         label[:] = label[torch.randperm(label.size(0))]
@@ -208,7 +209,7 @@ class Solver(object):
         start = 0
         for i, c_dim in enumerate(self.attr_dims):
             if i >= ind:
-                label_slice = label[:,start:start+c_dim]
+                label_slice = label[:, start:start + c_dim]
                 break
             else:
                 start += c_dim
@@ -263,10 +264,10 @@ class Solver(object):
         d_lr = self.d_lr
 
         # iterate dataset
-        data_iters = iter(self.data_loader)
+        data_iter = iter(self.data_loader)
 
         # fetch fixed images for debugging
-        x_fixed, _ = next(data_iters)
+        x_fixed, _ = next(data_iter)
         x_fixed = x_fixed.to(self.device)[:8]
         c_trg_list = self.create_labels()
 
@@ -288,10 +289,10 @@ class Solver(object):
 
             # get data and domain label
             try:
-                x_real, c_org_t = next(data_iters)
+                x_real, c_org_t = next(data_iter)
             # avoid StopIteration
             except:
-                data_iters = iter(self.data_loader)
+                data_iter = iter(self.data_loader)
                 x_real, c_org_t = next(data_iter)
 
             # generate target domain labels for transform randomly
@@ -309,7 +310,7 @@ class Solver(object):
             c_trg_l = c_trg_l.to(self.device)
 
             # reset loss record
-            d_loss_dict = {'D/loss_src':0, 'D/loss_gp':0}
+            d_loss_dict = {'D/loss_src': 0, 'D/loss_gp': 0}
             if i and i % self.n_critic == 0:
                 g_loss_dict = {}
 
@@ -322,7 +323,6 @@ class Solver(object):
             sum_d_loss_cls = 0
 
             for j in range(self.transformer_num):
-
                 # slice label for current transformer
                 c_trg_t_j = self.label_slice(c_trg_t, j)
                 c_org_l_j = self.label_slice(c_org_l, j)
@@ -330,7 +330,8 @@ class Solver(object):
                 # compute loss with real images
                 out_src, out_cls = self.D[j](x_real)
                 d_loss_real = - torch.mean(out_src)
-                d_loss_cls = F.binary_cross_entropy_with_logits(out_cls, c_org_l_j, size_average=False) / self.batch_size
+                d_loss_cls = F.binary_cross_entropy_with_logits(out_cls, c_org_l_j,
+                                                                size_average=False) / self.batch_size
 
                 # generate fake images
                 x_fake = self.R(self.T[j](self.E(x_real), c_trg_t_j))
@@ -377,7 +378,6 @@ class Solver(object):
                 sum_g_loss_cyc += torch.mean(torch.abs(x_real - x_rec))
 
                 for j in range(self.transformer_num):
-
                     # slice label for current transformer
                     c_trg_t_j = self.label_slice(c_trg_t, j)
                     c_trg_l_j = self.label_slice(c_trg_l, j)
@@ -389,7 +389,8 @@ class Solver(object):
                     # compute loss with fake images
                     out_src, out_cls = self.D[j](x_fake)
                     g_loss_fake = - torch.mean(out_src)
-                    g_loss_cls = F.binary_cross_entropy_with_logits(out_cls, c_trg_l_j, size_average=False) / self.batch_size
+                    g_loss_cls = F.binary_cross_entropy_with_logits(out_cls, c_trg_l_j,
+                                                                    size_average=False) / self.batch_size
 
                     # compute loss with cyclic reconstruction for feature map
                     f_rec = self.E(x_fake)
@@ -461,7 +462,7 @@ class Solver(object):
                 g_lr -= (self.g_lr / float(self.num_iters_decay))
                 d_lr -= (self.d_lr / float(self.num_iters_decay))
                 self.update_lr(g_lr, d_lr)
-                print ('Decayed learning rates, g_lr: {}, d_lr: {}.'.format(g_lr, d_lr))
+                print('Decayed learning rates, g_lr: {}, d_lr: {}.'.format(g_lr, d_lr))
 
     def test(self):
         """
@@ -489,7 +490,7 @@ class Solver(object):
                         x_list.append(x_fake)
                 # save the translated images
                 x_concat = torch.cat(x_list, dim=3)
-                result_path = os.path.join(self.result_dir, '{}-images.jpg'.format(i+1))
+                result_path = os.path.join(self.result_dir, '{}-images.jpg'.format(i + 1))
                 save_image(self.denorm(x_concat.data.cpu()), result_path, nrow=1, padding=0)
 
         print('Saved real and fake images into {}...'.format(result_path))
