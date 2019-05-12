@@ -11,7 +11,7 @@ class Loader(data.Dataset):
     """
     Dataset class for the CelebA dataset
     """
-    def __init__(self, image_dir, attr_path, selected_attrs, transform, mode, seed):
+    def __init__(self, image_dir, attr_path, selected_attrs, transform, mode):
         """Initialize and preprocess the CelebA dataset."""
         self.image_dir = image_dir
         self.attr_path = attr_path
@@ -22,7 +22,6 @@ class Loader(data.Dataset):
         self.test_dataset = []
         self.attr2idx = {}
         self.idx2attr = {}
-        self.seed = seed
         self.preprocess()
 
         if mode == 'train':
@@ -42,7 +41,7 @@ class Loader(data.Dataset):
             self.idx2attr[i] = attr_name
 
         lines = lines[2:]
-        random.seed(self.seed)
+        random.seed(135)
         random.shuffle(lines)
         cnt = 0
         for i, line in enumerate(lines):
@@ -88,7 +87,7 @@ class Loader(data.Dataset):
 
 def get_loader(image_dir='./data/celeba/images', attr_path='./data/celeba/list_attr_celeba.txt',
                selected_attrs=['Black_Hair', 'Blond_Hair', 'Brown_Hair'], crop_size=178,
-               image_size=128, batch_size=8, mode='train', num_workers=1, seed=246):
+               image_size=128, batch_size=8, mode='train', num_workers=1):
     """
     build a data loader
     """
@@ -101,7 +100,7 @@ def get_loader(image_dir='./data/celeba/images', attr_path='./data/celeba/list_a
     transform.append(T.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)))
     transform = T.Compose(transform)
 
-    dataset = Loader(image_dir, attr_path, selected_attrs, transform, mode, seed)
+    dataset = Loader(image_dir, attr_path, selected_attrs, transform, mode)
 
     data_loader = data.DataLoader(dataset=dataset,
                                   batch_size=batch_size,

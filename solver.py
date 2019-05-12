@@ -70,7 +70,10 @@ class Solver(object):
         self.lr_update_step = config.lr_update_step
 
         # build data loader
-        self.data_loaders = self.build_loaders()
+        from dataloader import get_loader
+        self.data_loader = get_loader(self.image_dir, self.attr_path, self.selected_attrs,
+                                      self.crop_size, self.image_size, self.batch_size,
+                                      self.mode, self.num_workers)
 
         # build the model and tensorboard
         self.build_model()
@@ -91,24 +94,6 @@ class Solver(object):
             print('Device: CPU')
         print('\n')
         return device
-
-    def build_loaders(self):
-        """
-        build data loader for different modulars
-        """
-        from dataloader import get_loader
-        random.seed(135)
-        data_loaders = []
-        ind = 0
-        for c_dim in self.attr_dims:
-            seed = random.randint(0, 200)
-            selected_attrs = self.selected_attrs[ind:ind+c_dim]
-            loader = get_loader(self.image_dir, self.attr_path, selected_attrs,
-                                self.crop_size, self.image_size, self.batch_size,
-                                self.mode, self.num_workers, seed)
-            data_loaders.append(loader)
-            ind += c_dim
-        return data_loaders
 
     def build_model(self):
         """
@@ -195,6 +180,33 @@ class Solver(object):
         self.R.load_state_dict(torch.load(R_path, map_location=lambda storage, loc: storage))
         self.D.load_state_dict(torch.load(D_path, map_location=lambda storage, loc: storage))
 
+    def generate_labels(self, label_org):
+        """
+        generate target domain labels for transform randomly
+        """
+        # shuffle
+        label_trg = label_org[torch.randperm(label_org.size(0))]
+        # reverse
+        ind = 0
+        for i, c_dim in enumerate(self.attr_dims):
+            if c_dim == 1:
+                label_trg[:,ind] = 1 - label_org[:,ind]
+            ind += c_dim
+        return label_trg
+
+    def label_slice(self, label, ind):
+        """
+        slice label for different transformers and discriminators
+        """
+        start = 0
+        for i, c_dim in enumerate(self.attr_dims):
+            if i >= ind:
+                label_slice = label[:,start:start+c_dim]
+                break
+            else:
+                start += c_dim
+        return label_slice
+
     def gradient_penalty(self, y, x):
         """
         gradient penalty for Wasserstein GAN
@@ -244,12 +256,10 @@ class Solver(object):
         d_lr = self.d_lr
 
         # iterate dataset
-        data_iters = []
-        for j in range(self.transformer_num):
-            data_iters.append(iter(self.data_loaders[j]))
+        data_iters = iter(self.data_loader)
 
-        # fetch 4 fixed images for debugging
-        x_fixed, c_org = next(iter(self.data_loaders[0]))
+        # fetch fixed images for debugging
+        x_fixed, _ = next(data_iters)
         x_fixed = x_fixed.to(self.device)[:8]
         c_trg_list = self.create_labels()
 
@@ -265,112 +275,117 @@ class Solver(object):
         tbar = tqdm(range(start_iters, self.num_iters))
         for i in tbar:
 
-            # reset loss record
-            total_d_loss = 0
-            d_loss_dict = {'D/loss_src':0, 'D/loss_gp':0}
-            if i and i % self.n_critic == 0:
-                total_g_loss = 0
-                g_loss_dict = {'G/loss_src':0, 'G/loss_rec':0}
-
-            for j in range(self.transformer_num):
-
             # =================================================================================== #
             #                             1. Preprocess input data                                #
             # =================================================================================== #
 
-                # get data and domain label
-                try:
-                    x_real, c_org_t = next(data_iters[j])
-                # avoid StopIteration
-                except:
-                    data_iters[j] = iter(self.data_loaders[j])
-                    x_real, c_org_t = next(data_iters[j])
+            # get data and domain label
+            try:
+                x_real, c_org_t = next(data_iters)
+            # avoid StopIteration
+            except:
+                data_iters = iter(self.data_loader)
+                x_real, c_org_t = next(data_iter)
 
-                # generate target domain labels for transform randomly
-                if c_org_t.size(1) > 1:
-                    # randomly shuffle
-                    c_trg_t = c_org_t[torch.randperm(c_org_t.size(0))]
-                else:
-                    # reverse value
-                    c_trg_t = 1 - c_org_t
+            # generate target domain labels for transform randomly
+            c_trg_t = self.generate_labels(c_org_t)
 
-                # copy domain labels for computing classification loss
-                c_org_l = c_org_t.clone()
-                c_trg_l = c_trg_t.clone()
+            # copy domain labels for computing classification loss
+            c_org_l = c_org_t.clone()
+            c_trg_l = c_trg_t.clone()
 
-                # to device
-                x_real = x_real.to(self.device)
-                c_org_t = c_org_t.to(self.device)
-                c_trg_t = c_trg_t.to(self.device)
-                c_org_l = c_org_l.to(self.device)
-                c_trg_l = c_trg_l.to(self.device)
+            # to device
+            x_real = x_real.to(self.device)
+            c_org_t = c_org_t.to(self.device)
+            c_trg_t = c_trg_t.to(self.device)
+            c_org_l = c_org_l.to(self.device)
+            c_trg_l = c_trg_l.to(self.device)
 
-                # generate fake images
-                x_fake = self.R(self.T[j](self.E(x_real), c_trg_t))
+            # reset loss record
+            d_loss_dict = {'D/loss_src':0, 'D/loss_gp':0}
+            if i and i % self.n_critic == 0:
+                g_loss_dict = {'G/loss_src':0, 'G/loss_rec':0}
 
             # =================================================================================== #
             #                             2. Train the discriminator                              #
             # =================================================================================== #
 
+            d_loss = 0
+            for j in range(self.transformer_num):
+
+                # slice label for current transformer
+                c_trg_t_j = self.label_slice(c_trg_t, j)
+                c_org_l_j = self.label_slice(c_org_l, j)
+
                 # compute loss with real images
                 out_src, out_cls = self.D[j](x_real)
                 d_loss_real = - torch.mean(out_src)
-                d_loss_cls = F.binary_cross_entropy_with_logits(out_cls, c_org_l, size_average=False) / self.batch_size
+                d_loss_cls = F.binary_cross_entropy_with_logits(out_cls, c_org_l_j, size_average=False) / self.batch_size
 
+                # generate fake images
+                x_fake = self.R(self.T[j](self.E(x_real), c_trg_t_j))
                 # compute loss with fake images
                 out_src, _ = self.D[j](x_fake.detach())
                 d_loss_fake = torch.mean(out_src)
 
-                # compute loss for gradient penalty.
+                # compute loss for gradient penalty
                 alpha = torch.rand(x_real.size(0), 1, 1, 1).to(self.device)
                 x_hat = (alpha * x_real.data + (1 - alpha) * x_fake.data).requires_grad_(True)
                 out_src, _ = self.D[j](x_hat)
                 d_loss_gp = self.gradient_penalty(out_src, x_hat)
 
                 # compute discrimination loss
-                d_loss = d_loss_real + d_loss_fake + self.lambda_gp * d_loss_gp + self.lambda_cls * d_loss_cls
-
-                # backward and optimize
-                self.reset_grad()
-                d_loss.backward()
-                self.d_optimizer.step()
+                d_loss += d_loss_real + d_loss_fake + self.lambda_gp * d_loss_gp + self.lambda_cls * d_loss_cls
 
                 # logging
-                total_d_loss += d_loss.item()
                 d_loss_dict['D/loss_src'] += d_loss_real.item() + d_loss_fake.item()
                 d_loss_dict['D/loss_gp'] += d_loss_gp.item()
                 d_loss_dict['D/loss_cls{}'.format(j)] = d_loss_cls.item()
+
+            # backward and optimize
+            self.reset_grad()
+            d_loss.backward()
+            self.d_optimizer.step()
 
             # =================================================================================== #
             #                               3. Train the generator                                #
             # =================================================================================== #
 
-                if i and i % self.n_critic == 0:
+            if i and i % self.n_critic == 0:
+
+                g_loss = 0
+                for j in range(self.transformer_num):
+
+                    # slice label for current transformer
+                    c_trg_t_j = self.label_slice(c_trg_t, j)
+                    c_trg_l_j = self.label_slice(c_trg_l, j)
+
+                    # generate fake images
+                    f_trs = self.T[j](self.E(x_real), c_trg_t_j)
+                    x_fake = self.R(f_trs)
 
                     # compute loss with fake images
                     out_src, out_cls = self.D[j](x_fake)
                     g_loss_fake = - torch.mean(out_src)
-                    g_loss_cls = F.binary_cross_entropy_with_logits(out_cls, c_trg_l, size_average=False) / self.batch_size
+                    g_loss_cls = F.binary_cross_entropy_with_logits(out_cls, c_trg_l_j, size_average=False) / self.batch_size
 
                     # compute loss with cyclic reconstruction
                     x_rec = self.R(self.E(x_real))
-                    f_trs = self.T[j](self.E(x_real), c_trg_t)
                     f_rec = self.E(x_fake)
                     g_loss_rec = torch.mean(torch.abs(x_real - x_rec)) / self.transformer_num + torch.mean(torch.abs(f_trs - f_rec))
 
                     # compute generation loss
-                    g_loss = g_loss_fake + self.lambda_rec * g_loss_rec + self.lambda_cls * g_loss_cls
-
-                     # backward and optimize
-                    self.reset_grad()
-                    g_loss.backward()
-                    self.g_optimizer.step()
+                    g_loss += g_loss_fake + self.lambda_rec * g_loss_rec + self.lambda_cls * g_loss_cls
 
                     # logging
-                    total_g_loss += g_loss.item()
                     g_loss_dict['G/loss_src'] += g_loss_fake.item()
                     g_loss_dict['G/loss_rec'] += g_loss_rec.item()
                     g_loss_dict['G/loss_cls{}'.format(j)] = g_loss_cls.item()
+
+                # backward and optimize
+                self.reset_grad()
+                g_loss.backward()
+                self.g_optimizer.step()
 
             # =================================================================================== #
             #                                 4. Miscellaneous                                    #
@@ -384,7 +399,7 @@ class Solver(object):
                 loss = {**g_loss_dict, **d_loss_dict}
                 for tag, value in loss.items():
                     log += ', {}: {:.4f}'.format(tag, value)
-                tbar.set_description('D_loss: {:2f}, G_loss: {:2f}'.format(total_d_loss, total_g_loss))
+                tbar.set_description('D_loss: {:.4f}, G_loss: {:.4f}'.format(d_loss.item(), g_loss.item()))
 
                 if self.use_tensorboard:
                     for tag, value in loss.items():
@@ -433,7 +448,7 @@ class Solver(object):
         c_trg_list = self.create_labels()
 
         with torch.no_grad():
-            
+
             tbar = tqdm(enumerate(self.data_loaders[0]), total=len(self.data_loaders[0]))
             for i, (x_real, c_org) in tbar:
 
