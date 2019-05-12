@@ -38,7 +38,7 @@ if __name__ == '__main__':
     parser.add_argument('--t_repeat_num', type=int, default=6, help='number of residual blocks in Transformer')
     parser.add_argument('--d_repeat_num', type=int, default=6, help='number of strided conv layers in Discriminator')
     parser.add_argument('--lambda_cls', type=float, default=1, help='weight for domain classification loss')
-    parser.add_argument('--lambda_rec', type=float, default=10, help='weight for reconstruction loss')
+    parser.add_argument('--lambda_cyc', type=float, default=10, help='weight for reconstruction loss')
     parser.add_argument('--lambda_gp', type=float, default=10, help='weight for gradient penalty')
     parser.add_argument('--attr_dims', type=list, nargs='+', default=[3, 1, 1], help='separate attributes into different modules')
     parser.add_argument('--selected_attrs', type=list, nargs='+', default=['Black_Hair', 'Blond_Hair', 'Brown_Hair', 'Male', 'Young'],

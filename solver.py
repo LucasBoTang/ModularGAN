@@ -29,7 +29,7 @@ class Solver(object):
         self.t_repeat_num = config.t_repeat_num
         self.d_repeat_num = config.d_repeat_num
         self.lambda_cls = config.lambda_cls
-        self.lambda_rec = config.lambda_rec
+        self.lambda_cyc = config.lambda_cyc
         self.lambda_gp = config.lambda_gp
         self.attr_dims = config.attr_dims
         self.transformer_num = len(self.attr_dims)
@@ -304,13 +304,16 @@ class Solver(object):
             # reset loss record
             d_loss_dict = {'D/loss_src':0, 'D/loss_gp':0}
             if i and i % self.n_critic == 0:
-                g_loss_dict = {'G/loss_src':0, 'G/loss_rec':0}
+                g_loss_dict = {}
 
             # =================================================================================== #
             #                             2. Train the discriminator                              #
             # =================================================================================== #
 
-            d_loss = 0
+            # initialize sum loss
+            sum_d_loss_adv = 0
+            sum_d_loss_cls = 0
+
             for j in range(self.transformer_num):
 
                 # slice label for current transformer
@@ -334,13 +337,17 @@ class Solver(object):
                 out_src, _ = self.D[j](x_hat)
                 d_loss_gp = self.gradient_penalty(out_src, x_hat)
 
-                # compute discrimination loss
-                d_loss += d_loss_real + d_loss_fake + self.lambda_gp * d_loss_gp + self.lambda_cls * d_loss_cls
+                # accumulate discrimination loss
+                sum_d_loss_adv += d_loss_real + d_loss_fake + self.lambda_gp * d_loss_gp
+                sum_d_loss_cls += d_loss_cls
 
                 # logging
                 d_loss_dict['D/loss_src'] += d_loss_real.item() + d_loss_fake.item()
                 d_loss_dict['D/loss_gp'] += d_loss_gp.item()
                 d_loss_dict['D/loss_cls{}'.format(j)] = d_loss_cls.item()
+
+            # compute discrimination loss
+            d_loss = sum_d_loss_adv + self.lambda_cls * sum_d_loss_cls
 
             # backward and optimize
             self.reset_grad()
@@ -353,7 +360,15 @@ class Solver(object):
 
             if i and i % self.n_critic == 0:
 
-                g_loss = 0
+                # initialize sum loss
+                sum_g_loss_adv = 0
+                sum_g_loss_cls = 0
+                sum_g_loss_cyc = 0
+
+                # compute loss with cyclic reconstruction for encoder-decoder
+                x_rec = self.R(self.E(x_real))
+                sum_g_loss_cyc += torch.mean(torch.abs(x_real - x_rec))
+
                 for j in range(self.transformer_num):
 
                     # slice label for current transformer
@@ -369,18 +384,22 @@ class Solver(object):
                     g_loss_fake = - torch.mean(out_src)
                     g_loss_cls = F.binary_cross_entropy_with_logits(out_cls, c_trg_l_j, size_average=False) / self.batch_size
 
-                    # compute loss with cyclic reconstruction
-                    x_rec = self.R(self.E(x_real))
+                    # compute loss with cyclic reconstruction for feature map
                     f_rec = self.E(x_fake)
-                    g_loss_rec = torch.mean(torch.abs(x_real - x_rec)) / self.transformer_num + torch.mean(torch.abs(f_trs - f_rec))
+                    g_loss_cyc = torch.mean(torch.abs(f_trs - f_rec))
 
-                    # compute generation loss
-                    g_loss += g_loss_fake + self.lambda_rec * g_loss_rec + self.lambda_cls * g_loss_cls
+                    # accumulate loss
+                    sum_g_loss_adv += g_loss_fake
+                    sum_g_loss_cls += g_loss_cls
+                    sum_g_loss_cyc += g_loss_cyc
 
                     # logging
-                    g_loss_dict['G/loss_src'] += g_loss_fake.item()
-                    g_loss_dict['G/loss_rec'] += g_loss_rec.item()
                     g_loss_dict['G/loss_cls{}'.format(j)] = g_loss_cls.item()
+                g_loss_dict['G/loss_src'] = sum_g_loss_adv.item()
+                g_loss_dict['G/loss_cyc'] = sum_g_loss_cyc.item()
+
+                # compute generation loss
+                g_loss = sum_g_loss_adv + self.lambda_cyc * sum_g_loss_cyc + self.lambda_cls * sum_g_loss_cls
 
                 # backward and optimize
                 self.reset_grad()
