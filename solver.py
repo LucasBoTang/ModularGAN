@@ -115,8 +115,8 @@ class Solver(object):
 
         # optimizer
         self.g_optimizer = torch.optim.Adam(
-            list(self.E.parameters()) + list(self.T.parameters()) + list(self.R.parameters()), self.g_lr,
-            [self.beta1, self.beta2])
+            list(self.E.parameters()) + list(self.T.parameters()) + list(self.R.parameters()),
+             self.g_lr, [self.beta1, self.beta2])
         self.d_optimizer = torch.optim.Adam(self.D.parameters(), self.d_lr, [self.beta1, self.beta2])
 
         # print information
@@ -186,21 +186,22 @@ class Solver(object):
         generate target domain labels for transform randomly
         """
         # shuffle
-        label_trg = label_org[torch.randperm(label_org.size(0))]
+        label_trg = label_org.clone()
+        label_trg = label_trg[torch.randperm(label_trg.size(0))]
         ind = 0
         for i, c_dim in enumerate(self.attr_dims):
-            # reverse
             if c_dim == 1:
+                # reverse
                 label_trg[:, ind] = 1 - label_org[:, ind]
-            # avoid empty label
             else:
+                # avoid empty label
                 for j in range(label_org.size(0)):
                     label = label_trg[j, ind:ind + c_dim]
                     if torch.sum(label) == 0:
                         label[0] = 1
                         label[:] = label[torch.randperm(label.size(0))]
             ind += c_dim
-        return label_trg
+        return label_trg.detach()
 
     def label_slice(self, label, ind):
         """
@@ -369,7 +370,7 @@ class Solver(object):
                 # compute loss with cyclic reconstruction for encoder-decoder
                 x_rec = self.R(self.E(x_real))
                 g_loss_cyc = torch.mean(torch.abs(x_real - x_rec))
-                g_loss += g_loss_cyc
+                g_loss += self.lambda_cyc * g_loss_cyc
 
                 # logging
                 g_loss_dict['G/loss_rec'] += g_loss_cyc.item()
@@ -395,7 +396,7 @@ class Solver(object):
 
                     # compute generation loss
                     g_loss += g_loss_fake + self.lambda_cyc * g_loss_cyc + self.lambda_cls * g_loss_cls
-
+                    
                     # logging
                     g_loss_dict['G/loss_src'] += g_loss_fake.item()
                     g_loss_dict['G/loss_rec'] += g_loss_cyc.item()

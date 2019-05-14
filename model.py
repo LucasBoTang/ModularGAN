@@ -19,8 +19,7 @@ class ResidualBlock(nn.Module):
         self.relu = nn.ReLU(inplace=True)
 
     def forward(self, x):
-        out = self.main(x)
-        out += x
+        out = x + self.main(x)
         out = self.relu(out)
         return out
 
@@ -42,7 +41,7 @@ class Encoder(nn.Module):
             layers.append(nn.Conv2d(conv_dim, conv_dim*2, kernel_size=4, stride=2, padding=1, bias=False))
             layers.append(nn.InstanceNorm2d(conv_dim*2, affine=True, track_running_stats=True))
             layers.append(nn.ReLU(inplace=True))
-            conv_dim = conv_dim * 2
+            conv_dim *= 2
 
         # residual blocks layers
         for i in range(repeat_num):
@@ -76,7 +75,7 @@ class Transformer(nn.Module):
 
         # attention layer
         self.mask = nn.Sequential(
-            nn.Conv2d(conv_dim, 1, kernel_size=7, stride=1, padding=3, bias=True),
+            nn.Conv2d(conv_dim, 1, kernel_size=7, stride=1, padding=3, bias=False),
             nn.Tanh())
 
     def forward(self, x, c):
@@ -103,12 +102,12 @@ class Reconstructor(nn.Module):
         layers.append(nn.ConvTranspose2d(conv_dim, conv_dim//2, kernel_size=4, stride=2, padding=1, bias=False))
         layers.append(nn.InstanceNorm2d(conv_dim//2, affine=True, track_running_stats=True))
         layers.append(nn.ReLU(inplace=True))
-        conv_dim = conv_dim // 2
+        conv_dim //= 2
 
         layers.append(nn.ConvTranspose2d(conv_dim, conv_dim//2, kernel_size=4, stride=2, padding=1, bias=False))
         layers.append(nn.InstanceNorm2d(conv_dim//2, affine=True, track_running_stats=True))
         layers.append(nn.ReLU(inplace=True))
-        conv_dim = conv_dim // 2
+        conv_dim //= 2
 
         # convlutional layer
         layers.append(nn.Conv2d(conv_dim, 3, kernel_size=3, stride=1, padding=1, bias=False))
@@ -129,22 +128,21 @@ class Discriminator(nn.Module):
         super(Discriminator, self).__init__()
 
         layers = []
-
         layers.append(nn.Conv2d(3, conv_dim, kernel_size=4, stride=2, padding=1))
         layers.append(nn.InstanceNorm2d(conv_dim, affine=True, track_running_stats=True))
         layers.append(nn.LeakyReLU(0.01))
-
         for i in range(1, repeat_num):
             layers.append(nn.Conv2d(conv_dim, conv_dim*2, kernel_size=4, stride=2, padding=1))
             layers.append(nn.InstanceNorm2d(conv_dim*2, affine=True, track_running_stats=True))
             layers.append(nn.LeakyReLU(0.01))
-            conv_dim = conv_dim * 2
-
+            conv_dim *= 2
         self.main = nn.Sequential(*layers)
+
         self.out_src = nn.Sequential(
             nn.Conv2d(conv_dim, 1, kernel_size=3, stride=1, padding=1, bias=False),
             nn.InstanceNorm2d(1, affine=True, track_running_stats=True),
             nn.LeakyReLU(0.01))
+
         self.out_cls = nn.Sequential(
             nn.Conv2d(conv_dim, c_dim, kernel_size=image_size//2**repeat_num, bias=False),
             nn.InstanceNorm2d(c_dim, affine=True, track_running_stats=True),
