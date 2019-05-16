@@ -28,7 +28,7 @@ class Solver(object):
         self.t_repeat_num = config.t_repeat_num
         self.d_repeat_num = config.d_repeat_num
         self.lambda_cls = config.lambda_cls
-        self.lambda_rec = config.lambda_rec
+        self.lambda_cyc = config.lambda_cyc
         self.lambda_gp = config.lambda_gp
         self.attr_dims = config.attr_dims
         self.transformer_num = len(self.attr_dims)
@@ -179,6 +179,28 @@ class Solver(object):
         self.R.load_state_dict(torch.load(R_path, map_location=lambda storage, loc: storage))
         self.D.load_state_dict(torch.load(D_path, map_location=lambda storage, loc: storage))
 
+    def generate_labels(self, label_org):
+        """
+        generate target domain labels for transform randomly
+        """
+        # shuffle
+        label_trg = label_org.clone()
+        label_trg = label_trg[torch.randperm(label_trg.size(0))]
+        ind = 0
+        for i, c_dim in enumerate(self.attr_dims):
+            if c_dim == 1:
+                # reverse
+                label_trg[:, ind] = 1 - label_org[:, ind]
+            else:
+                # avoid empty label
+                for j in range(label_org.size(0)):
+                    label = label_trg[j, ind:ind + c_dim]
+                    if torch.sum(label) == 0:
+                        label[0] = 1
+                        label[:] = label[torch.randperm(label.size(0))]
+            ind += c_dim
+        return label_trg.detach()
+
     def label_slice(self, label, ind):
         """
         slice label for different transformers and discriminators
@@ -261,11 +283,9 @@ class Solver(object):
         for i in tbar:
 
             # reset loss record
-            total_d_loss = 0
             d_loss_dict = {'D/loss_src':0, 'D/loss_gp':0}
             if i and i % self.n_critic == 0:
-                total_g_loss = 0
-                g_loss_dict = {'G/loss_src':0, 'G/loss_rec':0}
+                g_loss_dict = {'G/loss_src':0, 'G/loss_cyc':0}
 
             # =================================================================================== #
             #                             1. Preprocess input data                                #
@@ -280,7 +300,7 @@ class Solver(object):
                 x_real, c_org_t = next(data_iter)
 
             # generate target domain labels for transform randomly
-            c_trg_t = c_org_t[torch.randperm(c_org_t.size(0))]
+            c_trg_t = self.generate_labels(c_org_t)
 
             # copy domain labels for computing classification loss
             c_org_l = c_org_t.clone()
@@ -296,6 +316,9 @@ class Solver(object):
             # =================================================================================== #
             #                             2. Train the discriminator                              #
             # =================================================================================== #
+
+            # initialize total loss of discriminator
+            d_loss = 0
 
             for j in range(self.transformer_num):
 
@@ -321,18 +344,18 @@ class Solver(object):
                 d_loss_gp = self.gradient_penalty(out_src, x_hat)
 
                 # compute discrimination loss
-                d_loss = d_loss_real + d_loss_fake + self.lambda_gp * d_loss_gp + self.lambda_cls * d_loss_cls
+                d_loss_j = d_loss_real + d_loss_fake + self.lambda_gp * d_loss_gp + self.lambda_cls * d_loss_cls
 
                 # backward and optimize
                 self.reset_grad()
-                d_loss.backward()
+                d_loss_j.backward()
                 self.d_optimizer.step()
 
                 # logging
-                total_d_loss += d_loss.item()
                 d_loss_dict['D/loss_src'] += d_loss_real.item() + d_loss_fake.item()
                 d_loss_dict['D/loss_gp'] += d_loss_gp.item()
                 d_loss_dict['D/loss_cls{}'.format(j)] = d_loss_cls.item()
+                d_loss += d_loss_j.item()
 
             # =================================================================================== #
             #                               3. Train the generator                                #
@@ -342,11 +365,11 @@ class Solver(object):
 
                 # compute loss with cyclic reconstruction for encoder and decoder
                 x_rec = self.R(self.E(x_real))
-                g_loss_rec = torch.mean(torch.abs(x_real - x_rec)) * self.transformer_num
-                g_loss = self.lambda_rec * g_loss_rec
+                g_loss_cyc = torch.mean(torch.abs(x_real - x_rec)) * self.transformer_num
+                g_loss = self.lambda_cyc * g_loss_cyc
 
                 # logging
-                g_loss_dict['G/loss_rec'] += g_loss_rec.item()
+                g_loss_dict['G/loss_cyc'] += g_loss_cyc.item()
 
                 for j in range(self.transformer_num):
 
@@ -365,14 +388,14 @@ class Solver(object):
 
                     # compute loss with cyclic reconstruction for features
                     f_rec = self.E(x_fake)
-                    g_loss_rec = torch.mean(torch.abs(f_trs - f_rec))
+                    g_loss_cyc = torch.mean(torch.abs(f_trs - f_rec))
 
                     # compute generation loss
-                    g_loss += g_loss_fake + self.lambda_rec * g_loss_rec + self.lambda_cls * g_loss_cls
+                    g_loss += g_loss_fake + self.lambda_cyc * g_loss_cyc + self.lambda_cls * g_loss_cls
 
                     # logging
                     g_loss_dict['G/loss_src'] += g_loss_fake.item()
-                    g_loss_dict['G/loss_rec'] += g_loss_rec.item()
+                    g_loss_dict['G/loss_cyc'] += g_loss_cyc.item()
                     g_loss_dict['G/loss_cls{}'.format(j)] = g_loss_cls.item()
 
                 # backward and optimize
@@ -392,7 +415,7 @@ class Solver(object):
                 loss = {**g_loss_dict, **d_loss_dict}
                 for tag, value in loss.items():
                     log += ', {}: {:.4f}'.format(tag, value)
-                tbar.set_description('D_loss: {:.3f}, G_loss: {:.3f}'.format(total_d_loss, g_loss))
+                tbar.set_description('D_loss: {:.3f}, G_loss: {:.3f}'.format(d_loss, g_loss))
 
                 if self.use_tensorboard:
                     for tag, value in loss.items():

@@ -54,9 +54,6 @@ class Loader(data.Dataset):
                 idx = self.attr2idx[attr_name]
                 label.append(values[idx] == '1')
 
-            # avoid ambiguous label
-            if len(self.selected_attrs) > 1 and not any(label):
-                continue
             cnt += 1
 
             if cnt <= 2000:
