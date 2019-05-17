@@ -8,7 +8,7 @@ ModularGAN consists of several reusable and composable modules that carry on dif
 ### Update
 Update on 2019/05/11: Provide model which could be trained and tested.
 
-### TODO
+### Todo
 - Provide model trained on Celeba
 - Compute the classification error of each attribute
 
