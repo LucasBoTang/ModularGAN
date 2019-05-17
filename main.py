@@ -18,8 +18,13 @@ def main(config):
     if not os.path.exists(config.result_dir):
         os.makedirs(config.result_dir)
 
+    from dataloader import get_loader
+    data_loader = get_loader(config.image_dir, config.attr_path, config.selected_attrs,
+                            config.crop_size, config.image_size, config.batch_size,
+                            config.mode, config.num_workers)
+
     # run
-    solver = Solver(config)
+    solver = Solver(config, data_loader)
     if config.mode == 'train':
         solver.train()
     elif config.mode == 'test':
@@ -45,9 +50,9 @@ if __name__ == '__main__':
                         help='selected attributes for the CelebA dataset')
 
     # training configuration
-    parser.add_argument('--batch_size', type=int, default=8, help='mini-batch size')
-    parser.add_argument('--num_iters', type=int, default=400000, help='number of total iterations for training D')
-    parser.add_argument('--num_iters_decay', type=int, default=200000, help='number of iterations for decaying lr')
+    parser.add_argument('--batch_size', type=int, default=16, help='mini-batch size')
+    parser.add_argument('--num_iters', type=int, default=200000, help='number of total iterations for training D')
+    parser.add_argument('--num_iters_decay', type=int, default=100000, help='number of iterations for decaying lr')
     parser.add_argument('--g_lr', type=float, default=0.0001, help='learning rate for Generation')
     parser.add_argument('--d_lr', type=float, default=0.0001, help='learning rate for Discrimination')
     parser.add_argument('--n_critic', type=int, default=5, help='number of D updates per each G update')
@@ -56,7 +61,7 @@ if __name__ == '__main__':
     parser.add_argument('--resume_iters', type=int, default=None, help='resume training from this step')
 
     # test configuration
-    parser.add_argument('--test_iters', type=int, default=400000, help='test model from this step')
+    parser.add_argument('--test_iters', type=int, default=200000, help='test model from this step')
 
     # miscellaneous.
     parser.add_argument('--num_workers', type=int, default=1)
@@ -74,7 +79,7 @@ if __name__ == '__main__':
     # step size
     parser.add_argument('--log_step', type=int, default=10)
     parser.add_argument('--sample_step', type=int, default=1000)
-    parser.add_argument('--model_save_step', type=int, default=20000)
+    parser.add_argument('--model_save_step', type=int, default=10000)
     parser.add_argument('--lr_update_step', type=int, default=1000)
 
     config = parser.parse_args()
