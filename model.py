@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import numpy as np
 
 
 class ResidualBlock(nn.Module):
@@ -75,7 +76,7 @@ class Transformer(nn.Module):
 
         # attention layer
         self.mask = nn.Sequential(
-            nn.Conv2d(conv_dim, 1, kernel_size=7, stride=1, padding=3, bias=False),
+            nn.Conv2d(conv_dim, 1, kernel_size=7, stride=1, padding=3, bias=True),
             nn.Tanh())
 
     def forward(self, x, c):
@@ -155,7 +156,6 @@ class Discriminator(nn.Module):
         # predicts attributes
         out_cls = self.out_cls(h)
         return out_src, out_cls.view(out_cls.size(0), out_cls.size(1))
-
 
 if __name__ == '__main__':
     """

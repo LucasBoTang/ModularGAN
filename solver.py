@@ -1,4 +1,3 @@
-
 from model import Encoder, Transformer, Reconstructor, Discriminator
 from torch.autograd import Variable
 from torchvision.utils import save_image
@@ -115,7 +114,6 @@ class Solver(object):
         self.print_network('Transformers', self.T)
         self.print_network('Reconstructor', self.R)
         self.print_network('Discriminators', self.D)
-        print('\n')
 
         # move to device
         self.E.to(self.device)
@@ -130,8 +128,12 @@ class Solver(object):
         num_params = 0
         for p in model.parameters():
             num_params += p.numel()
-        # print(model)
+        if type(model) == torch.nn.modules.container.ModuleList:
+            print(model[0])
+        else:
+            print(model)
         print('The number of parameters: {} in {}'.format(num_params, name))
+        print('\n')
 
     def build_tensorboard(self):
         """
@@ -363,7 +365,7 @@ class Solver(object):
 
                 # generate fake images
                 x_fake = self.R(self.T[j](self.E(x_real), c_trg_t_j))
-                # compute loss with fake images
+                # compute classification loss with fake images
                 out_src, _ = self.D[j](x_fake.detach())
                 d_loss_fake = torch.mean(out_src)
 
@@ -395,7 +397,7 @@ class Solver(object):
                 # clear gradient
                 self.reset_grad()
 
-                # compute loss with cyclic reconstruction for encoder and decoder
+                # compute l1 loss with cyclic reconstruction for encoder and decoder
                 x_rec = self.R(self.E(x_real))
                 g_loss_cyc = torch.mean(torch.abs(x_real - x_rec))
 
@@ -422,10 +424,9 @@ class Solver(object):
                     g_loss_fake = - torch.mean(out_src)
                     g_loss_cls = F.binary_cross_entropy_with_logits(out_cls, c_trg_l_j, size_average=False) / x_real.size(0)
 
-                    # compute loss with cyclic reconstruction for features and images
+                    # compute l1 loss with cyclic reconstruction for encoded features
                     f_rec = self.E(x_fake)
-                    x_rec = self.R(self.T[j](f_rec, c_org_t_j))
-                    g_loss_cyc = torch.mean(torch.abs(f_trs - f_rec)) + torch.mean(torch.abs(x_real - x_rec))
+                    g_loss_cyc = torch.mean(torch.abs(f_trs - f_rec))
 
                     # compute generation loss and backward
                     g_loss = g_loss_fake + self.lambda_cyc * g_loss_cyc + self.lambda_cls * g_loss_cls
