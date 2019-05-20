@@ -255,9 +255,6 @@ class Solver(object):
         """
         with torch.no_grad():
             x_list = [x_fixed]
-            # encode and decode
-            x_rec = self.R(self.E(x_fixed))
-            x_list.append(x_rec)
             # transform
             for j in range(len(c_trg_list)):
                 for c_trg in c_trg_list[j]:
