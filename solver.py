@@ -472,7 +472,7 @@ class Solver(object):
 
     def test(self):
         """
-        translate images using StarGAN trained on a single dataset
+        translate images using trained ModularGAN
         """
         # load the trained generator
         self.restore_model(self.test_iters)
