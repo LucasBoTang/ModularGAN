@@ -11,7 +11,7 @@ ModularGAN consists of several reusable and composable modules that carry on dif
 
 ### Update
 - Update on 2019/05/11: Provide model which could be trained and tested.
-- Update on 2019/05/17: Try to train the model by adding a new cyclic loss
+- Update on 2019/05/20: Try to train the model by changing model architecture
 
 <br />
 
