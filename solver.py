@@ -156,7 +156,7 @@ class Solver(object):
                     label[:, i] = 1
                     labels.append(label)
             else:
-                labels = [torch.zeros([batch, 1]).to(self.device), torch.ones([batch, 1]).to(self.device)]
+                labels = [torch.ones([batch, 1]).to(self.device), torch.zeros([batch, 1]).to(self.device)]
             label_list.append(labels)
         return label_list
 
@@ -173,28 +173,6 @@ class Solver(object):
         self.T.load_state_dict(torch.load(T_path, map_location=lambda storage, loc: storage))
         self.R.load_state_dict(torch.load(R_path, map_location=lambda storage, loc: storage))
         self.D.load_state_dict(torch.load(D_path, map_location=lambda storage, loc: storage))
-
-    def generate_labels(self, label_org):
-        """
-        generate target domain labels for transform randomly
-        """
-        # shuffle
-        label_trg = label_org.clone()
-        label_trg = label_trg[torch.randperm(label_trg.size(0))]
-        ind = 0
-        for i, c_dim in enumerate(self.attr_dims):
-            if c_dim == 1:
-                # reverse
-                label_trg[:, ind] = 1 - label_org[:, ind]
-            else:
-                # avoid empty label
-                for j in range(label_org.size(0)):
-                    label = label_trg[j, ind:ind + c_dim]
-                    if torch.sum(label) == 0:
-                        label[0] = 1
-                        label[:] = label[torch.randperm(label.size(0))]
-            ind += c_dim
-        return label_trg.detach()
 
     def label_slice(self, label, ind):
         """
@@ -326,7 +304,7 @@ class Solver(object):
                 x_real, c_org_t = next(data_iter)
 
             # generate target domain labels for transform randomly
-            c_trg_t = self.generate_labels(c_org_t)
+            c_trg_t = c_org_t[torch.randperm(c_org_t.size(0))]
 
             # copy domain labels for computing classification loss
             c_org_l = c_org_t.clone()
@@ -456,7 +434,9 @@ class Solver(object):
                         self.logger.scalar_summary(tag, value, i)
 
             # translate fixed images for debugging
-            if i % self.sample_step == 0:
+            if i and i < 1000 and i % 100 == 0:
+                self.save_sample(x_fixed, c_trg_list, i)
+            if i and i % self.sample_step == 0:
                 self.save_sample(x_fixed, c_trg_list, i)
 
             # save checkpoints
