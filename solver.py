@@ -1,3 +1,4 @@
+
 from model import Encoder, Transformer, Reconstructor, Discriminator
 from torch.autograd import Variable
 from torchvision.utils import save_image
@@ -174,6 +175,32 @@ class Solver(object):
         self.R.load_state_dict(torch.load(R_path, map_location=lambda storage, loc: storage))
         self.D.load_state_dict(torch.load(D_path, map_location=lambda storage, loc: storage))
 
+    def generate_labels(self, label_org):
+        """
+        generate target domain labels which are different from original
+        """
+        label_trg = torch.zeros_like(label_org)
+        # reverse
+        label_trg = 1 - label_org
+        # finetune multi-label
+        start = 0
+        for i, c_dim in enumerate(self.attr_dims):
+            if c_dim > 1:
+                for j in range(label_org.size(0)):
+                    label = label_trg[j, start:start+c_dim]
+                    # avoid empty label
+                    if torch.sum(label) == 0:
+                        label[0] = 1
+                        label[:] = label[torch.randperm(c_dim)]
+                    # only one positive left
+                    elif torch.sum(label) > 1:
+                        inds = torch.nonzero(label).view(-1)
+                        inds = inds[torch.randperm(inds.size(0))]
+                        for ind in inds[1:]:
+                            label[ind] = 0
+            start += c_dim
+        return label_trg.detach()
+
     def label_slice(self, label, ind):
         """
         slice label for different transformers and discriminators
@@ -304,7 +331,7 @@ class Solver(object):
                 x_real, c_org_t = next(data_iter)
 
             # generate target domain labels for transform randomly
-            c_trg_t = c_org_t[torch.randperm(c_org_t.size(0))]
+            c_trg_t = self.generate_labels(c_org_t)
 
             # copy domain labels for computing classification loss
             c_org_l = c_org_t.clone()
@@ -434,7 +461,7 @@ class Solver(object):
                         self.logger.scalar_summary(tag, value, i)
 
             # translate fixed images for debugging
-            if i and i < 1000 and i % 100 == 0:
+            if i < 1000 and i % 100 == 0:
                 self.save_sample(x_fixed, c_trg_list, i)
             if i and i % self.sample_step == 0:
                 self.save_sample(x_fixed, c_trg_list, i)
