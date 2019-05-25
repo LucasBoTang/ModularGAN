@@ -12,7 +12,9 @@ class Loader(data.Dataset):
     Dataset class for the CelebA dataset
     """
     def __init__(self, image_dir, attr_path, selected_attrs, transform, mode):
-        """Initialize and preprocess the CelebA dataset."""
+        """
+        Initialize and preprocess the CelebA dataset
+        """
         self.image_dir = image_dir
         self.attr_path = attr_path
         self.selected_attrs = selected_attrs

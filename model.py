@@ -96,19 +96,14 @@ class Reconstructor(nn.Module):
         layers = []
 
         # up-sampling layers
-        layers.append(nn.ConvTranspose2d(conv_dim, conv_dim//2, kernel_size=4, stride=2, padding=1, bias=False))
-        layers.append(nn.InstanceNorm2d(conv_dim//2, affine=True, track_running_stats=True))
-        layers.append(nn.ReLU(inplace=True))
-        conv_dim //= 2
-
-        layers.append(nn.ConvTranspose2d(conv_dim, conv_dim//2, kernel_size=4, stride=2, padding=1, bias=False))
-        layers.append(nn.InstanceNorm2d(conv_dim//2, affine=True, track_running_stats=True))
-        layers.append(nn.ReLU(inplace=True))
-        conv_dim //= 2
+        for _ in range(2):
+            layers.append(nn.ConvTranspose2d(conv_dim, conv_dim//2, kernel_size=4, stride=2, padding=1, bias=False))
+            layers.append(nn.InstanceNorm2d(conv_dim//2, affine=True, track_running_stats=True))
+            layers.append(nn.ReLU(inplace=True))
+            conv_dim //= 2
 
         # convlutional layer
         layers.append(nn.Conv2d(conv_dim, 3, kernel_size=7, stride=1, padding=3, bias=False))
-        layers.append(nn.InstanceNorm2d(3, affine=True, track_running_stats=True))
         layers.append(nn.Tanh())
 
         self.main = nn.Sequential(*layers)
@@ -131,18 +126,16 @@ class Discriminator(nn.Module):
             layers.append(nn.Conv2d(conv_dim, conv_dim*2, kernel_size=4, stride=2, padding=1))
             layers.append(nn.LeakyReLU(0.01))
             conv_dim *= 2
+
         self.main = nn.Sequential(*layers)
-
-        self.out_src = nn.Sequential(
-            nn.Conv2d(conv_dim, 1, kernel_size=3, stride=1, padding=1, bias=False))
-
-        self.out_cls = nn.Sequential(nn.Conv2d(conv_dim, c_dim, kernel_size=image_size//2**repeat_num, bias=False))
+        self.out_src = nn.Conv2d(conv_dim, 1, kernel_size=3, stride=1, padding=1, bias=False)
+        self.out_cls = nn.Conv2d(conv_dim, c_dim, kernel_size=image_size//2**repeat_num, bias=False)
 
     def forward(self, x):
         h = self.main(x)
-        # real or fake on each patch
+        # patch gan classification
         out_src = self.out_src(h)
-        # predicts attributes
+        # attributes classification
         out_cls = self.out_cls(h)
         return out_src, out_cls.view(out_cls.size(0), out_cls.size(1))
 
