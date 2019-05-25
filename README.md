@@ -12,7 +12,7 @@ ModularGAN consists of several reusable and composable modules that carry on dif
 ### Update
 - Update on 2019/05/11: Provide model which could be trained and tested.
 - Update on 2019/05/20: Try to train the model by changing model architecture
-- Update on 2019/05/20: Try to train the model by changing model architecture further
+- Update on 2019/05/25: Try to train the model by changing model architecture further
 
 <br />
 
