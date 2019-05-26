@@ -30,22 +30,22 @@ class Solver(object):
         self.lambda_cyc = config.lambda_cyc
         self.lambda_gp = config.lambda_gp
         self.attr_dims = config.attr_dims
-        self.transformer_num = len(self.attr_dims)
+        self.num_transformer = len(self.attr_dims)
         self.selected_attrs = config.selected_attrs
 
         # training configurations
         self.batch_size = config.batch_size
-        self.num_iters = config.num_iters
-        self.num_iters_decay = config.num_iters_decay
+        self.num_epochs = config.num_epochs
+        self.num_epochs_decay = config.num_epochs_decay
         self.g_lr = config.g_lr
         self.d_lr = config.d_lr
         self.n_critic = config.n_critic
         self.beta1 = config.beta1
         self.beta2 = config.beta2
-        self.resume_iters = config.resume_iters
+        self.resume_epoch = config.resume_epoch
 
         # test configurations
-        self.test_iters = config.test_iters
+        self.test_epoch = config.test_epoch
 
         # miscellaneous
         self.num_workers = config.num_workers
@@ -161,15 +161,15 @@ class Solver(object):
             label_list.append(labels)
         return label_list
 
-    def restore_model(self, resume_iters):
+    def restore_model(self, resume_epoch):
         """
         restore the trained model
         """
-        print('Loading the trained models from step {}...'.format(resume_iters))
-        E_path = os.path.join(self.model_save_dir, '{}-E.ckpt'.format(resume_iters))
-        T_path = os.path.join(self.model_save_dir, '{}-T.ckpt'.format(resume_iters))
-        R_path = os.path.join(self.model_save_dir, '{}-R.ckpt'.format(resume_iters))
-        D_path = os.path.join(self.model_save_dir, '{}-D.ckpt'.format(resume_iters))
+        print('Loading the trained models from step {}...'.format(resume_epoch))
+        E_path = os.path.join(self.model_save_dir, '{}-E.ckpt'.format(resume_epoch))
+        T_path = os.path.join(self.model_save_dir, '{}-T.ckpt'.format(resume_epoch))
+        R_path = os.path.join(self.model_save_dir, '{}-R.ckpt'.format(resume_epoch))
+        D_path = os.path.join(self.model_save_dir, '{}-D.ckpt'.format(resume_epoch))
         self.E.load_state_dict(torch.load(E_path, map_location=lambda storage, loc: storage))
         self.T.load_state_dict(torch.load(T_path, map_location=lambda storage, loc: storage))
         self.R.load_state_dict(torch.load(R_path, map_location=lambda storage, loc: storage))
@@ -186,7 +186,7 @@ class Solver(object):
         start = 0
         for i, c_dim in enumerate(self.attr_dims):
             if c_dim > 1:
-                for j in range(label_org.size(0)):
+                for j in range(label_trg.size(0)):
                     label = label_trg[j, start:start+c_dim]
                     # avoid empty label
                     if torch.sum(label) == 0:
@@ -199,6 +199,8 @@ class Solver(object):
                         for ind in inds[1:]:
                             label[ind] = 0
             start += c_dim
+        # shuffle
+        label_trg = label_trg[torch.randperm(label_trg.size(0))]
         return label_trg.detach()
 
     def label_slice(self, label, ind):
@@ -254,31 +256,30 @@ class Solver(object):
         for param_group in self.d_optimizer.param_groups:
             param_group['lr'] = d_lr
 
-    def save_sample(self, x_fixed, c_trg_list, ind):
+    def save_sample(self, x, c_trg_list, save_path, ind):
         """
         save translated image for debug and test
         """
         with torch.no_grad():
-            x_list = [x_fixed]
+            x_list = [x]
             # transform
-            for j in range(len(c_trg_list)):
+            for j in range(self.num_transformer):
                 for c_trg in c_trg_list[j]:
-                    x_fake = self.R(self.T[j](self.E(x_fixed), c_trg))
+                    x_fake = self.R(self.T[j](self.E(x), c_trg))
                     x_list.append(x_fake)
             x_concat = torch.cat(x_list, dim=3)
             # save images
-            sample_path = os.path.join(self.sample_dir, '{}-images.jpg'.format(ind))
+            sample_path = os.path.join(save_path, '{}-images.jpg'.format(ind))
             save_image(self.denorm(x_concat.data.cpu()), sample_path, nrow=1, padding=0)
-            print('Saved real and fake images into {}...'.format(sample_path))
 
-    def save_checkpoint(self, ind):
+    def save_checkpoint(self, epoch):
         """
         save checkpoints
         """
-        E_path = os.path.join(self.model_save_dir, '{}-E.ckpt'.format(ind))
-        T_path = os.path.join(self.model_save_dir, '{}-T.ckpt'.format(ind))
-        R_path = os.path.join(self.model_save_dir, '{}-R.ckpt'.format(ind))
-        D_path = os.path.join(self.model_save_dir, '{}-D.ckpt'.format(ind))
+        E_path = os.path.join(self.model_save_dir, '{}-E.ckpt'.format(epoch))
+        T_path = os.path.join(self.model_save_dir, '{}-T.ckpt'.format(epoch))
+        R_path = os.path.join(self.model_save_dir, '{}-R.ckpt'.format(epoch))
+        D_path = os.path.join(self.model_save_dir, '{}-D.ckpt'.format(epoch))
         torch.save(self.E.state_dict(), E_path)
         torch.save(self.T.state_dict(), T_path)
         torch.save(self.R.state_dict(), R_path)
@@ -293,187 +294,178 @@ class Solver(object):
         g_lr = self.g_lr
         d_lr = self.d_lr
 
-        # iterate dataset
-        data_iter = iter(self.data_loader)
-
         # fetch fixed images for debugging
-        x_fixed, _ = next(data_iter)
+        x_fixed, _ = next(iter(self.data_loader))
         x_fixed = x_fixed.to(self.device)[:8]
         c_trg_list = self.create_labels()
 
         # start training from scratch or resume training.
-        start_iters = 0
-        if self.resume_iters:
-            start_iters = self.resume_iters
-            self.restore_model(self.resume_iters)
+        start_epoch = 0
+        if self.resume_epoch:
+            start_epoch = self.resume_epoch
+            self.restore_model(self.resume_epoch)
 
         # start training
         print('Start training...')
+        print('sample images will be saved into {}...'.format(self.sample_dir))
+
         start_time = time.time()
-        tbar = tqdm(range(start_iters, self.num_iters))
-        for i in tbar:
+        i = -1
+        for epoch in range(start_epoch, self.num_epochs):
+            print('Start epoch {}...'.format(epoch))
 
-            # reset loss record
-            d_loss_dict = {'D/loss_src':0, 'D/loss_gp':0}
-            if i and i % self.n_critic == 0:
-                g_loss_dict = {'G/loss_src':0, 'G/loss_cyc':0}
+            tbar = tqdm(self.data_loader, ascii=True)
+            for x_real, c_org_t in tbar:
+                i += 1
 
-            # =================================================================================== #
-            #                             1. Preprocess input data                                #
-            # =================================================================================== #
+                # reset loss record
+                d_loss_dict = {'D/loss_src':0, 'D/loss_gp':0}
+                if i and i % self.n_critic == 0:
+                    g_loss_dict = {'G/loss_src':0, 'G/loss_cyc':0}
 
-            # get data and domain label
-            try:
-                x_real, c_org_t = next(data_iter)
-            # avoid StopIteration
-            except:
-                data_iter = iter(self.data_loader)
-                x_real, c_org_t = next(data_iter)
+                # =================================================================================== #
+                #                             1. Preprocess input data                                #
+                # =================================================================================== #
 
-            # generate target domain labels for transform randomly
-            c_trg_t = self.generate_labels(c_org_t)
+                # generate target domain labels for transform randomly
+                c_trg_t = self.generate_labels(c_org_t)
 
-            # copy domain labels for computing classification loss
-            c_org_l = c_org_t.clone()
-            c_trg_l = c_trg_t.clone()
+                # copy domain labels for computing classification loss
+                c_org_l = c_org_t.clone()
+                c_trg_l = c_trg_t.clone()
 
-            # to device
-            x_real = x_real.to(self.device)
-            c_org_t = c_org_t.to(self.device)
-            c_trg_t = c_trg_t.to(self.device)
-            c_org_l = c_org_l.to(self.device)
-            c_trg_l = c_trg_l.to(self.device)
+                # to device
+                x_real = x_real.to(self.device)
+                c_org_t = c_org_t.to(self.device)
+                c_trg_t = c_trg_t.to(self.device)
+                c_org_l = c_org_l.to(self.device)
+                c_trg_l = c_trg_l.to(self.device)
 
-            # =================================================================================== #
-            #                             2. Train the discriminator                              #
-            # =================================================================================== #
-
-            # initialize total loss of discriminator
-            d_loss = 0
-
-            for j in range(self.transformer_num):
+                # =================================================================================== #
+                #                             2. Train the discriminator                              #
+                # =================================================================================== #
 
                 # clear gradient
                 self.reset_grad()
 
-                # slice label for current transformer
-                c_trg_t_j = self.label_slice(c_trg_t, j)
-                c_org_l_j = self.label_slice(c_org_l, j)
+                # initialize total loss of discriminator
+                d_loss = 0
 
-                # compute classification loss with real images
-                out_src, out_cls = self.D[j](x_real)
-                d_loss_real = - torch.mean(out_src)
-                d_loss_cls = F.binary_cross_entropy_with_logits(out_cls, c_org_l_j, size_average=False) / x_real.size(0)
-
-                # generate fake images
-                x_fake = self.R(self.T[j](self.E(x_real), c_trg_t_j))
-                # compute classification loss with fake images
-                out_src, _ = self.D[j](x_fake.detach())
-                d_loss_fake = torch.mean(out_src)
-
-                # compute classification loss for gradient penalty
-                alpha = torch.rand(x_real.size(0), 1, 1, 1).to(self.device)
-                x_hat = (alpha * x_real.data + (1 - alpha) * x_fake.data).requires_grad_(True)
-                out_src, _ = self.D[j](x_hat)
-                d_loss_gp = self.gradient_penalty(out_src, x_hat)
-
-                # compute discrimination loss
-                d_loss_j = d_loss_real + d_loss_fake + self.lambda_gp * d_loss_gp + self.lambda_cls * d_loss_cls
-
-                # backward and optimize
-                d_loss_j.backward()
-                self.d_optimizer.step()
-
-                # logging
-                d_loss_dict['D/loss_src'] += d_loss_real.item() + d_loss_fake.item()
-                d_loss_dict['D/loss_gp'] += d_loss_gp.item()
-                d_loss_dict['D/loss_cls{}'.format(j)] = d_loss_cls.item()
-                d_loss += d_loss_j.item()
-
-            # =================================================================================== #
-            #                               3. Train the generator                                #
-            # =================================================================================== #
-
-            if i and i % self.n_critic == 0:
-
-                # clear gradient
-                self.reset_grad()
-
-                # compute l1 loss with cyclic reconstruction for encoder and decoder
-                x_rec = self.R(self.E(x_real))
-                g_loss_cyc = torch.mean(torch.abs(x_real - x_rec))
-
-                # compute generation loss and backward
-                g_loss = self.lambda_cyc * g_loss_cyc
-                g_loss.backward()
-
-                # logging
-                g_loss_dict['G/loss_cyc'] += g_loss_cyc.item()
-
-                for j in range(self.transformer_num):
+                for j in range(self.num_transformer):
 
                     # slice label for current transformer
-                    c_org_t_j = self.label_slice(c_org_t, j)
                     c_trg_t_j = self.label_slice(c_trg_t, j)
-                    c_trg_l_j = self.label_slice(c_trg_l, j)
+                    c_org_l_j = self.label_slice(c_org_l, j)
+
+                    # compute classification loss with real images
+                    out_src, out_cls = self.D[j](x_real)
+                    d_loss_real = - torch.mean(out_src)
+                    d_loss_cls = F.binary_cross_entropy_with_logits(out_cls, c_org_l_j, reduction='sum') / x_real.size(0)
 
                     # generate fake images
-                    f_trs = self.T[j](self.E(x_real), c_trg_t_j)
-                    x_fake = self.R(f_trs)
-
+                    x_fake = self.R(self.T[j](self.E(x_real), c_trg_t_j))
                     # compute classification loss with fake images
-                    out_src, out_cls = self.D[j](x_fake)
-                    g_loss_fake = - torch.mean(out_src)
-                    g_loss_cls = F.binary_cross_entropy_with_logits(out_cls, c_trg_l_j, size_average=False) / x_real.size(0)
+                    out_src, _ = self.D[j](x_fake.detach())
+                    d_loss_fake = torch.mean(out_src)
 
-                    # compute l1 loss with cyclic reconstruction for encoded features
-                    f_rec = self.E(x_fake)
-                    g_loss_cyc = torch.mean(torch.abs(f_trs - f_rec))
+                    # compute classification loss for gradient penalty
+                    alpha = torch.rand(x_real.size(0), 1, 1, 1).to(self.device)
+                    x_hat = (alpha * x_real.data + (1 - alpha) * x_fake.data).requires_grad_(True)
+                    out_src, _ = self.D[j](x_hat)
+                    d_loss_gp = self.gradient_penalty(out_src, x_hat)
+
+                    # compute discrimination loss
+                    d_loss_j = d_loss_real + d_loss_fake + self.lambda_gp * d_loss_gp + self.lambda_cls * d_loss_cls
+
+                    # logging
+                    d_loss_dict['D/loss_src'] += d_loss_real.item() + d_loss_fake.item()
+                    d_loss_dict['D/loss_gp'] += d_loss_gp.item()
+                    d_loss_dict['D/loss_cls{}'.format(j)] = d_loss_cls.item()
+                    d_loss += d_loss_j
+
+                # backward and optimize
+                d_loss.backward()
+                self.d_optimizer.step()
+
+                # =================================================================================== #
+                #                               3. Train the generator                                #
+                # =================================================================================== #
+
+                if i and i % self.n_critic == 0:
+
+                    # clear gradient
+                    self.reset_grad()
+
+                    # compute l1 loss with cyclic reconstruction for encoder and decoder
+                    x_rec = self.R(self.E(x_real))
+                    g_loss_cyc = torch.mean(torch.abs(x_real - x_rec))
 
                     # compute generation loss and backward
-                    g_loss = g_loss_fake + self.lambda_cyc * g_loss_cyc + self.lambda_cls * g_loss_cls
+                    g_loss = self.lambda_cyc * g_loss_cyc
                     g_loss.backward()
 
                     # logging
-                    g_loss_dict['G/loss_src'] += g_loss_fake.item()
                     g_loss_dict['G/loss_cyc'] += g_loss_cyc.item()
-                    g_loss_dict['G/loss_cls{}'.format(j)] = g_loss_cls.item()
 
-                # backward and optimize
-                self.g_optimizer.step()
+                    for j in range(self.num_transformer):
+
+                        # slice label for current transformer
+                        c_org_t_j = self.label_slice(c_org_t, j)
+                        c_trg_t_j = self.label_slice(c_trg_t, j)
+                        c_trg_l_j = self.label_slice(c_trg_l, j)
+
+                        # generate fake images
+                        f_trs = self.T[j](self.E(x_real), c_trg_t_j)
+                        x_fake = self.R(f_trs)
+
+                        # compute classification loss with fake images
+                        out_src, out_cls = self.D[j](x_fake)
+                        g_loss_fake = - torch.mean(out_src)
+                        g_loss_cls = F.binary_cross_entropy_with_logits(out_cls, c_trg_l_j, reduction='sum') / x_real.size(0)
+
+                        # compute l1 loss with cyclic reconstruction for encoded features
+                        f_rec = self.E(x_fake)
+                        g_loss_cyc = torch.mean(torch.abs(f_trs - f_rec))
+
+                        # compute generation loss and backward
+                        g_loss_j = g_loss_fake + self.lambda_cyc * g_loss_cyc + self.lambda_cls * g_loss_cls
+                        g_loss_j.backward()
+                        g_loss += g_loss_j
+
+                        # logging
+                        g_loss_dict['G/loss_src'] += g_loss_fake.item()
+                        g_loss_dict['G/loss_cyc'] += g_loss_cyc.item()
+                        g_loss_dict['G/loss_cls{}'.format(j)] = g_loss_cls.item()
+
+                    # backward and optimize
+                    self.g_optimizer.step()
 
             # =================================================================================== #
             #                                 4. Miscellaneous                                    #
             # =================================================================================== #
 
-            # show the training information
-            if i and i % self.log_step == 0:
-                et = time.time() - start_time
-                et = str(datetime.timedelta(seconds=et))[:-7]
-                log = 'Elapsed [{}], Iteration [{}/{}]'.format(et, i, self.num_iters)
-                loss = {**g_loss_dict, **d_loss_dict}
-                for tag, value in loss.items():
-                    log += ', {}: {:.4f}'.format(tag, value)
-                tbar.set_description('D_loss: {:.3f}, G_loss: {:.3f}'.format(d_loss, g_loss))
+                # show the training information
+                if i and i % self.log_step == 0:
+                    loss = {**g_loss_dict, **d_loss_dict}
+                    tbar.set_description('D_loss: {:.3f}, G_loss: {:.3f}'.format(d_loss, g_loss))
+                    if self.use_tensorboard:
+                        for tag, value in loss.items():
+                            self.logger.scalar_summary(tag, value, i)
 
-                if self.use_tensorboard:
-                    for tag, value in loss.items():
-                        self.logger.scalar_summary(tag, value, i)
-
-            # translate fixed images for debugging
-            if i < 1000 and i % 100 == 0:
-                self.save_sample(x_fixed, c_trg_list, i)
-            if i and i % self.sample_step == 0:
-                self.save_sample(x_fixed, c_trg_list, i)
+                # translate fixed images for debugging
+                if i < 1000 and i % 100 == 0:
+                    self.save_sample(x_fixed, c_trg_list, self.sample_dir, i)
+                if i and i % self.sample_step == 0:
+                    self.save_sample(x_fixed, c_trg_list, self.sample_dir, i)
 
             # save checkpoints
-            if i and i % self.model_save_step == 0:
-                self.save_checkpoint(i)
+            if epoch % self.model_save_step == 0:
+                self.save_checkpoint(epoch)
 
             # decay learning rates
-            if i % self.lr_update_step == 0 and i > self.num_iters - self.num_iters_decay:
-                g_lr -= (self.g_lr / float(self.num_iters_decay))
-                d_lr -= (self.d_lr / float(self.num_iters_decay))
+            if epoch % self.lr_update_step == 0 and epoch > self.num_epochs - self.num_epochs_decay:
+                g_lr -= (self.g_lr / self.num_epochs_decay)
+                d_lr -= (self.d_lr / self.num_epochs_decay)
                 self.update_lr(g_lr, d_lr)
                 print('Decayed learning rates, g_lr: {}, d_lr: {}.'.format(g_lr, d_lr))
 
@@ -482,20 +474,19 @@ class Solver(object):
         translate images using trained ModularGAN
         """
         # load the trained generator
-        self.restore_model(self.test_iters)
+        self.restore_model(self.test_epoch)
 
         # create target domain labels
         c_trg_list = self.create_labels()
 
-        with torch.no_grad():
+        tbar = tqdm(self.data_loaders)
+        i = -1
+        for x_real, c_org in tbar:
 
-            tbar = tqdm(enumerate(self.data_loaders[0]), total=len(self.data_loaders[0]))
-            for i, (x_real, c_org) in tbar:
-
-                # fecth input images
-                x_real = x_real.to(self.device)
-
-                # translate and save
-                self.save_sample(x_real, c_trg_list, i)
+            i += 1
+            # fecth input images
+            x_real = x_real.to(self.device)
+            # translate and save
+            self.save_sample(x_real, c_trg_list, self.result_dir, i)
 
         print('Saved real and fake images into {}...'.format(result_path))
