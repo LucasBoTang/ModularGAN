@@ -5,14 +5,15 @@ This repository provides an unofficial PyTorch implementation of ModularGan. The
 
 ModularGAN consists of several reusable and composable modules that carry on different functions (e.g., encoding, decoding, transformations). These modules can be trained simultaneously, leveraging data from all domains, and then combined to construct specific GAN networks at test time, according to the specific image translation task.
 
-**Attention:** **The code is an unofficial version, and the details of model is not excactly same as paper. Especially, the model architecture is very different.**
+**Attention:** **The code is an unofficial version, and the details of model is not exactly same as paper. Especially, the model architecture and hyperparameters are different.**
 
 <br />
 
 ### Update
 - Update on 2019/05/11: Provide model which could be trained and tested.
-- Update on 2019/05/20: Try to train the model by changing model architecture
-- Update on 2019/05/25: Try to train the model by changing model architecture further
+- Update on 2019/05/20: Modify model architecture
+- Update on 2019/05/25: Change model architecture further
+- Update on 2019/05/28: Use lower learning rate
 
 <br />
 

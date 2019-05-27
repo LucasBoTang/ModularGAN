@@ -1,13 +1,10 @@
-
 from model import Encoder, Transformer, Reconstructor, Discriminator
-from torch.autograd import Variable
 from torchvision.utils import save_image
 import torch
 import torch.nn.functional as F
 from tqdm import tqdm
 import os
 import time
-import datetime
 
 
 class Solver(object):
@@ -179,7 +176,6 @@ class Solver(object):
         """
         generate target domain labels which are different from original
         """
-        label_trg = torch.zeros_like(label_org)
         # reverse
         label_trg = 1 - label_org
         # finetune multi-label
@@ -262,6 +258,9 @@ class Solver(object):
         """
         with torch.no_grad():
             x_list = [x]
+            # reconstruct
+            x_rec = self.R(self.E(x))
+            x_list.append(x_rec)
             # transform
             for j in range(self.num_transformer):
                 for c_trg in c_trg_list[j]:
@@ -489,4 +488,4 @@ class Solver(object):
             # translate and save
             self.save_sample(x_real, c_trg_list, self.result_dir, i)
 
-        print('Saved real and fake images into {}...'.format(result_path))
+        print('Saved real and fake images into {}...'.format(self.result_dir))
