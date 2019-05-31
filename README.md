@@ -11,12 +11,6 @@ ModularGAN consists of several reusable and composable modules that carry on dif
 
 <br />
 
-### Todo
-- [X] Provide pretrained model
-- [ ] Evaluate the classification error of each attribute
-
-<br />
-
 ### Dependencies
 * [Python 3.6+](https://www.continuum.io/downloads)
 * [PyTorch 1.0.1+](http://pytorch.org/)
