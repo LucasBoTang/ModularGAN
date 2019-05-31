@@ -79,7 +79,8 @@ Cofiguration (e.g. batch size, number of residual blocks) could be customized ea
 
 ### Result
 #### 1. Sample images
-<p align="center"><img width="100%" src="image/sample.png" /></p>
+<p align="center"><img width="100%" src="image/sample1.png" /></p>
+<p align="center"><img width="100%" src="image/sample2.png" /></p>
 
 <br />
 
