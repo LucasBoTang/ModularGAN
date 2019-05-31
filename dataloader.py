@@ -11,13 +11,14 @@ class Loader(data.Dataset):
     """
     Dataset class for the CelebA dataset
     """
-    def __init__(self, image_dir, attr_path, selected_attrs, transform, mode):
+    def __init__(self, image_dir, attr_path, selected_attrs, attr_dims, transform, mode):
         """
         Initialize and preprocess the CelebA dataset
         """
         self.image_dir = image_dir
         self.attr_path = attr_path
         self.selected_attrs = selected_attrs
+        self.attr_dims = attr_dims
         self.transform = transform
         self.mode = mode
         self.train_dataset = []
@@ -56,6 +57,15 @@ class Loader(data.Dataset):
                 idx = self.attr2idx[attr_name]
                 label.append(values[idx] == '1')
 
+            #start = 0
+            #ambiguous = False
+            #for attr_dim in self.attr_dims:
+            #    if attr_dim > 1 and not any(label[start:start+attr_dim]):
+            #        ambiguous = True
+            #    start += attr_dim
+            #if ambiguous:
+            #    continue
+
             cnt += 1
 
             if cnt <= 2000:
@@ -85,8 +95,8 @@ class Loader(data.Dataset):
 
 
 def get_loader(image_dir='./data/celeba/images', attr_path='./data/celeba/list_attr_celeba.txt',
-               selected_attrs=['Black_Hair', 'Blond_Hair', 'Brown_Hair'], crop_size=178,
-               image_size=128, batch_size=8, mode='train', num_workers=1):
+               selected_attrs=['Black_Hair', 'Blond_Hair', 'Brown_Hair'], attr_dims=[3, 1, 1],
+               crop_size=178, image_size=128, batch_size=8, mode='train'):
     """
     build a data loader
     """
@@ -99,12 +109,9 @@ def get_loader(image_dir='./data/celeba/images', attr_path='./data/celeba/list_a
     transform.append(T.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)))
     transform = T.Compose(transform)
 
-    dataset = Loader(image_dir, attr_path, selected_attrs, transform, mode)
+    dataset = Loader(image_dir, attr_path, selected_attrs, attr_dims, transform, mode)
 
-    data_loader = data.DataLoader(dataset=dataset,
-                                  batch_size=batch_size,
-                                  shuffle=(mode=='train'),
-                                  num_workers=num_workers)
+    data_loader = data.DataLoader(dataset=dataset, batch_size=batch_size, shuffle=(mode=='train'))
     return data_loader
 
 if __name__ == '__main__':

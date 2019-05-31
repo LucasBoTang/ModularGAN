@@ -45,7 +45,6 @@ class Solver(object):
         self.test_epoch = config.test_epoch
 
         # miscellaneous
-        self.num_workers = config.num_workers
         self.use_tensorboard = config.use_tensorboard
         self.device = self.get_device()
 

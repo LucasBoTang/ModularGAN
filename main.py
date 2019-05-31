@@ -20,8 +20,8 @@ def main(config):
 
     from dataloader import get_loader
     data_loader = get_loader(config.image_dir, config.attr_path, config.selected_attrs,
-                            config.crop_size, config.image_size, config.batch_size,
-                            config.mode, config.num_workers)
+                             config.attr_dims, config.crop_size, config.image_size,
+                             config.batch_size, config.mode)
 
     # run
     solver = Solver(config, data_loader)
@@ -64,7 +64,6 @@ if __name__ == '__main__':
     parser.add_argument('--test_epoch', type=int, default=20, help='test model from this step')
 
     # miscellaneous.
-    parser.add_argument('--num_workers', type=int, default=1)
     parser.add_argument('--mode', type=str, default='train', choices=['train', 'test'])
     parser.add_argument('--use_tensorboard', type=bool, default=True)
 
