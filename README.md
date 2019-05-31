@@ -1,5 +1,7 @@
 # ModularGAN
 
+<p align="center"><img width="100%" src="image/cover.png" /></p>
+
 ### Introduction
 This repository provides an unofficial PyTorch implementation of ModularGan. The original paper is [Modular Generative Adversarial Networks](https://arxiv.org/pdf/1804.03343.pdf).
 
@@ -9,18 +11,9 @@ ModularGAN consists of several reusable and composable modules that carry on dif
 
 <br />
 
-### Update
-- Update on 2019/05/11: Provide model which could be trained and tested.
-- Update on 2019/05/20: Modify model architecture
-- Update on 2019/05/25: Change model architecture further
-- Update on 2019/05/28: Use lower learning rate
-
-<br />
-
 ### Todo
-- [ ] Make sure the model could be trained correctly
-- [ ] Provide model trained on Celeba
-- [ ] Compute the classification error of each attribute
+- [X] Provide pretrained model
+- [ ] Evaluate the classification error of each attribute
 
 <br />
 
@@ -32,36 +25,59 @@ ModularGAN consists of several reusable and composable modules that carry on dif
 
 <br />
 
-### Usage
+### Download
 
-#### 1. Cloning the repository
+#### 1. Repository
 ```bash
 $ git clone https://github.com/LucasBoTang/ModularGAN.git
 $ cd ModularGAN/
 ```
 
-#### 2. Downloading dataset
+#### 2. Dataset
 To download the [CelebA dataset](http://mmlab.ie.cuhk.edu.hk/projects/CelebA.html):
 ```bash
 $ bash download.sh data
 ```
+Or the zip file could be downloaded directly [here](https://www.dropbox.com/s/d1kjpkqklf0uw77/celeba.zip?dl=0).
 
-#### 3. Training and testing
+#### 3. Pretrained model
+To download the pretrained model:
+```bash
+$ bash download.sh model
+```
+Or the zip file could be downloaded directly [here](https://www.dropbox.com/s/n1vxfdlbrbt4gk4/pretrained.zip?dl=0).
+
+<br />
+
+### Training and testing
+
+#### 1. Training
 To train the model
 ```bash
-$ python main.py --mode train
+$ python main.py --mode train --batch_size 16 --num_epochs 20 
 ```
 
+#### 2. Loss curve
+<p align="center"><img width="100%" src="image/loss_curve.png" /></p>
+
+#### 3. Sample images 
+<p align="center"><img width="100%" src="image/sample.gif" /></p>
+
+#### 4. Testing 
 To test the model
 ```bash
-$ python main.py --mode test --test_iters 200000
+$ python main.py --mode test --test_epoch 20
 ```
 
-To customize configuration
-
+#### 5. Cofiguration
 Cofiguration (e.g. batch size, number of residual blocks) could be customized easily by using argparse.
 
 <br />
 
+### Result
+<p align="center"><img width="100%" src="image/sample.png" /></p>
+
+<br />
+
 ### Acknowledgement
-The code is mainly based on the GitHub repository StarGan (https://github.com/yunjey/stargan).
+The code is mainly based on the GitHub repository [StarGan](https://github.com/yunjey/stargan).
