@@ -60,7 +60,7 @@ $ python main.py --mode train --batch_size 16 --num_epochs 20
 #### 2. Loss curve
 <p align="center"><img width="100%" src="image/loss_curve.png" /></p>
 
-#### 3. Sample images 
+#### 3. Images generation
 <p align="center"><img width="100%" src="image/sample.gif" /></p>
 
 #### 4. Testing 
@@ -75,6 +75,7 @@ Cofiguration (e.g. batch size, number of residual blocks) could be customized ea
 <br />
 
 ### Result
+#### 1. Sample images
 <p align="center"><img width="100%" src="image/sample.png" /></p>
 
 <br />
