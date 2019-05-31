@@ -140,21 +140,20 @@ class Solver(object):
         from logger import Logger
         self.logger = Logger(self.log_dir)
 
-    def create_labels(self):
+    def create_labels(self, batch_size):
         """
         generate target domain labels for debugging and testing
         """
         label_list = []
-        batch = min(self.batch_size, 8)
         for c_dim in self.attr_dims:
             if c_dim > 1:
                 labels = []
                 for i in range(c_dim):
-                    label = torch.zeros([batch, c_dim]).to(self.device)
+                    label = torch.zeros([batch_size, c_dim]).to(self.device)
                     label[:, i] = 1
                     labels.append(label)
             else:
-                labels = [torch.ones([batch, 1]).to(self.device), torch.zeros([batch, 1]).to(self.device)]
+                labels = [torch.ones([batch_size, 1]).to(self.device), torch.zeros([batch_size, 1]).to(self.device)]
             label_list.append(labels)
         return label_list
 
@@ -258,16 +257,32 @@ class Solver(object):
         """
         with torch.no_grad():
             x_list = [x]
+            # encode
+            feat = self.E(x)
             # reconstruct
-            x_rec = self.R(self.E(x))
+            x_rec = self.R(feat)
             x_list.append(x_rec)
             # transform
             for j in range(self.num_transformer):
                 for c_trg in c_trg_list[j]:
-                    x_fake = self.R(self.T[j](self.E(x), c_trg))
+                    x_fake = self.R(self.T[j](feat, c_trg))
                     x_list.append(x_fake)
-            x_concat = torch.cat(x_list, dim=3)
+            # multi transform
+            #batch_size = x.size(0)
+            #c0 = torch.zeros(batch_size, 3).to(self.device)
+            #c0[:,1] = 1                                                      # blond hair
+            #c1 = torch.ones(batch_size, 1).to(self.device)                   # male
+            #c2 = torch.zeros(batch_size, 1).to(self.device)                  # female
+            #x_fake = self.R(self.T[1](self.T[0](feat, c0), c1))
+            #x_list.append(x_fake)
+            #x_fake = self.R(self.T[2](self.T[0](feat, c0), c2))
+            #x_list.append(x_fake)
+            #x_fake = self.R(self.T[2](self.T[1](feat, c1), c2))
+            #x_list.append(x_fake)
+            #x_fake = self.R(self.T[2](self.T[1](self.T[0](feat, c0), c1), c2))
+            #x_list.append(x_fake)
             # save images
+            x_concat = torch.cat(x_list, dim=3)
             sample_path = os.path.join(save_path, '{}-images.jpg'.format(ind))
             save_image(self.denorm(x_concat.data.cpu()), sample_path, nrow=1, padding=0)
 
@@ -296,12 +311,13 @@ class Solver(object):
         # fetch fixed images for debugging
         x_fixed, _ = next(iter(self.data_loader))
         x_fixed = x_fixed.to(self.device)[:8]
-        c_trg_list = self.create_labels()
+        batch_size = min(self.batch_size, 8)
+        c_trg_list = self.create_labels(batch_size)
 
         # start training from scratch or resume training.
         start_epoch = 0
         if self.resume_epoch:
-            start_epoch = self.resume_epoch
+            start_epoch = self.resume_epoch + 1
             self.restore_model(self.resume_epoch)
 
         # start training
@@ -309,8 +325,9 @@ class Solver(object):
         print('sample images will be saved into {}...'.format(self.sample_dir))
 
         start_time = time.time()
+        #i = start_epoch * len(self.data_loader) - 1
         i = -1
-        for epoch in range(start_epoch, self.num_epochs):
+        for epoch in range(start_epoch, self.num_epochs+1):
             print('Start epoch {}...'.format(epoch))
 
             tbar = tqdm(self.data_loader, ascii=True)
@@ -476,9 +493,9 @@ class Solver(object):
         self.restore_model(self.test_epoch)
 
         # create target domain labels
-        c_trg_list = self.create_labels()
+        c_trg_list = self.create_labels(self.batch_size)
 
-        tbar = tqdm(self.data_loaders)
+        tbar = tqdm(self.data_loader, ascii=True)
         i = -1
         for x_real, c_org in tbar:
 

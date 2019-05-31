@@ -61,7 +61,7 @@ if __name__ == '__main__':
     parser.add_argument('--resume_epoch', type=int, default=None, help='resume training from this step')
 
     # test configuration
-    parser.add_argument('--test_epoch', type=int, default=200000, help='test model from this step')
+    parser.add_argument('--test_epoch', type=int, default=20, help='test model from this step')
 
     # miscellaneous.
     parser.add_argument('--num_workers', type=int, default=1)
