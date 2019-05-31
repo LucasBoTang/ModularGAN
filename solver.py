@@ -325,8 +325,7 @@ class Solver(object):
         print('sample images will be saved into {}...'.format(self.sample_dir))
 
         start_time = time.time()
-        #i = start_epoch * len(self.data_loader) - 1
-        i = -1
+        i = start_epoch * len(self.data_loader) - 1
         for epoch in range(start_epoch, self.num_epochs+1):
             print('Start epoch {}...'.format(epoch))
 
