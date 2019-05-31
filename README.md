@@ -30,12 +30,12 @@ ModularGAN consists of several reusable and composable modules that carry on dif
 #### 1. Repository
 ```bash
 $ git clone https://github.com/LucasBoTang/ModularGAN.git
-$ cd ModularGAN/
 ```
 
 #### 2. Dataset
 To download the [CelebA dataset](http://mmlab.ie.cuhk.edu.hk/projects/CelebA.html):
 ```bash
+$ cd ModularGAN/
 $ bash download.sh data
 ```
 Or the zip file could be downloaded directly [here](https://www.dropbox.com/s/d1kjpkqklf0uw77/celeba.zip?dl=0).
@@ -43,6 +43,7 @@ Or the zip file could be downloaded directly [here](https://www.dropbox.com/s/d1
 #### 3. Pretrained model
 To download the pretrained model:
 ```bash
+$ cd ModularGAN/
 $ bash download.sh model
 ```
 Or the zip file could be downloaded directly [here](https://www.dropbox.com/s/n1vxfdlbrbt4gk4/pretrained.zip?dl=0).
@@ -54,7 +55,8 @@ Or the zip file could be downloaded directly [here](https://www.dropbox.com/s/n1
 #### 1. Training
 To train the model
 ```bash
-$ python main.py --mode train --batch_size 16 --num_epochs 20 
+$ cd ModularGAN/
+$ python main.py --mode train --batch_size 16 --num_epochs 20
 ```
 
 #### 2. Loss curve
@@ -63,9 +65,10 @@ $ python main.py --mode train --batch_size 16 --num_epochs 20
 #### 3. Images generation
 <p align="center"><img width="100%" src="image/sample.gif" /></p>
 
-#### 4. Testing 
+#### 4. Testing
 To test the model
 ```bash
+$ cd ModularGAN/
 $ python main.py --mode test --test_epoch 20
 ```
 
