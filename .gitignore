@@ -3,3 +3,4 @@ __pycache__/dataloader.cpython-36.pyc
 *.pyc
 *.DESKTOP-DIN56QO
 *.ckpt
+*.zip

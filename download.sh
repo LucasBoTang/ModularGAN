@@ -10,3 +10,13 @@ if [ $FILE == "data" ]; then
     wget -N $URL -O $ZIP_FILE
     unzip $ZIP_FILE -d ./data/
     rm $ZIP_FILE
+
+if [ $FILE == "data" ]; then
+
+    # pretrained model
+    URL=https://www.dropbox.com/s/n1vxfdlbrbt4gk4/pretrained.zip?dl=0
+    ZIP_FILE=./model/pretrained.zip
+    mkdir -p ./model/
+    wget -N $URL -O $ZIP_FILE
+    unzip $ZIP_FILE -d ./model/
+    rm $ZIP_FILE
