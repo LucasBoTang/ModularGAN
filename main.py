@@ -68,8 +68,8 @@ if __name__ == '__main__':
     parser.add_argument('--use_tensorboard', type=bool, default=True)
 
     # directories
-    parser.add_argument('--image_dir', type=str, default='D:/Data/celeba/images')
-    parser.add_argument('--attr_path', type=str, default='D:/Data/celeba/list_attr_celeba.txt')
+    parser.add_argument('--image_dir', type=str, default='./data/celeba/images')
+    parser.add_argument('--attr_path', type=str, default='./data/celeba/list_attr_celeba.txt')
     parser.add_argument('--log_dir', type=str, default='./logs')
     parser.add_argument('--model_save_dir', type=str, default='./models')
     parser.add_argument('--sample_dir', type=str, default='./samples')
