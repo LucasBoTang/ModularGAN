@@ -69,6 +69,83 @@ $ python main.py --mode test --test_epoch 20
 #### 5. Cofiguration
 Cofiguration (e.g. batch size, number of residual blocks) could be customized easily by using argparse.
 
+##### Model configuration
+
+--crop_size: image crop size
+
+--image_size: image resolution
+
+--e_conv_dim: number of conv filters in the first layer of Encoder
+
+--d_conv_dim: number of conv filters in the first layer of Discriminator
+
+--e_repeat_num: number of residual blocks in Encoder
+
+--t_repeat_num: number of residual blocks in Transformer
+
+--d_repeat_num: number of strided conv layers in Discriminator
+
+'--lambda_cls: weight for domain classification loss
+
+--lambda_cyc: weight for reconstruction loss
+
+--lambda_gp: weight for gradient penalty
+
+--attr_dims: separate attributes into different modules
+
+--selected_attrs: selected attributes for the CelebA dataset
+
+--batch_size: mini-batch size
+
+--num_epochs: number of total iterations for training D
+
+--num_epochs_decay: number of iterations for decaying lr
+
+--g_lr: learning rate for Generation
+
+--d_lr: learning rate for Discrimination
+
+--n_critic: number of D updates per each G update
+
+--beta1: beta1 for Adam optimizer
+
+--beta2: beta2 for Adam optimizer
+
+--lr_update_step: step of update learning rate
+
+--resume_epoch: resume training from this step
+
+##### Test configuration
+
+--test_epoch: test on this epoch
+
+--mode: train or test
+
+--use_tensorboard: use tensorboard or not
+
+##### Directories
+
+--image_dir: directory of images
+
+--attr_path: file path of attributes
+
+--log_dir: directory of logs
+
+--model_save_dir: directory to save model checkpoints
+
+--sample_dir: directory to save samples
+
+--result_dir: directory to save results
+
+##### Sample step size
+
+--log_step: step of log
+
+--sample_step: step of sample
+
+--model_save_step: step of saving model checkpoints
+
+
 <br />
 
 ### Result
