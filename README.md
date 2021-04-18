@@ -12,7 +12,7 @@ ModularGAN consists of several reusable and composable modules that carry on dif
 <br />
 
 ### Dependencies
-* [Python 3.6+](https://www.continuum.io/downloads)
+* [Python 3.6+](https://www.python.org/)
 * [PyTorch 1.0.1+](http://pytorch.org/)
 * [tqdm 4.31+](https://tqdm.github.io/)
 * [TensorFlow 1.13+](https://www.tensorflow.org/) (optional for tensorboard)
