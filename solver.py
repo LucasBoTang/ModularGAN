@@ -28,7 +28,6 @@ class Solver(object):
         self.lambda_gp = config.lambda_gp
         self.attr_dims = config.attr_dims
         self.num_transformer = len(self.attr_dims)
-        self.selected_attrs = config.selected_attrs
 
         # training configurations
         self.batch_size = config.batch_size
