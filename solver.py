@@ -238,8 +238,7 @@ class Solver(object):
             if i >= ind:
                 label_slice = label[:, start:start + c_dim]
                 break
-            else:
-                start += c_dim
+            start += c_dim
         return label_slice
 
     def gradient_penalty(self, y, x):
