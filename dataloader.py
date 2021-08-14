@@ -95,11 +95,15 @@ class Loader(data.Dataset):
 
 
 def get_loader(image_dir='./data/celeba/images', attr_path='./data/celeba/list_attr_celeba.txt',
-               selected_attrs=['Black_Hair', 'Blond_Hair', 'Brown_Hair'], attr_dims=[3, 1, 1],
+               selected_attrs=None, attr_dims=None,
                crop_size=178, image_size=128, batch_size=8, mode='train'):
     """
     build a data loader
     """
+    if selected_attrs is None:
+        selected_attrs = ['Black_Hair', 'Blond_Hair', 'Brown_Hair']
+    if attr_dims is None:
+        attr_dims = [3, 1, 1]
     transform = []
     if mode == 'train':
         transform.append(T.RandomHorizontalFlip())
