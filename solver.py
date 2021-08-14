@@ -144,7 +144,7 @@ class Solver(object):
         num_params = 0
         for p in model.parameters():
             num_params += p.numel()
-        if type(model) == torch.nn.modules.container.ModuleList:
+        if type(model) is torch.nn.modules.container.ModuleList:
             print(model[0])
         else:
             print(model)
