@@ -1,7 +1,7 @@
 import tensorflow as tf
 
 
-class Logger(object):
+class Logger:
     """
     tensorboard logger
     """
