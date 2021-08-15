@@ -69,7 +69,8 @@ class Solver(object):
         if self.use_tensorboard:
             self.build_tensorboard()
 
-    def get_device(self):
+    @staticmethod
+    def get_device():
         """
         get device
         """
@@ -137,7 +138,8 @@ class Solver(object):
         self.R.to(self.device)
         self.D.to(self.device)
 
-    def print_network(self, name, model):
+    @staticmethod
+    def print_network(name, model):
         """
         print out the network information
         """
@@ -267,7 +269,8 @@ class Solver(object):
         self.g_optimizer.zero_grad()
         self.d_optimizer.zero_grad()
 
-    def denorm(self, x):
+    @staticmethod
+    def denorm(x):
         """
         convert the range from [-1, 1] to [0, 1]
         """
