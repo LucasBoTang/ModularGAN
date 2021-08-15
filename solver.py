@@ -9,7 +9,7 @@ from tqdm import tqdm
 from model import Discriminator, Encoder, Reconstructor, Transformer
 
 
-class Solver(object):
+class Solver:
     """
     solver for training and testing ModularGAN
     """
